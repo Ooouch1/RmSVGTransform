@@ -1,7 +1,8 @@
+require '../src/rmSvgTrns'
+
 require 'test/unit'
 require 'test/unit/rr' # not a default package
 
-require '../src/rmSvgTrns'
 require 'logger'
 
 $test_logger = Logger.new(STDOUT)
@@ -61,11 +62,7 @@ class MatrixFactoryTest < Test::Unit::TestCase
 		end
 
 		test 'matrix' do
-			stub(@factory.parser).parse {[
-				{key:'matrix', values:[0,1,2,3,4,5]}
-			]}
-
-			matrix = @factory.create ['dummy()']
+			matrix = @factory.create({key:'matrix', values:[0,1,2,3,4,5]})
 			$test_logger.info('Factory:single_transform, matrix') {matrix}
 
 			assert_elem = -> (v, i, j) {
@@ -86,11 +83,8 @@ class MatrixFactoryTest < Test::Unit::TestCase
 		end
 
 		test 'rotate: center is origin' do
-			stub(@factory.parser).parse {[
-				{key:'rotate', values:[-Math::PI/4]}
-			]}
 			
-			matrix = @factory.create ['dummy()']
+			matrix = @factory.create({key:'rotate', values:[-Math::PI/4]})
 			# p = matrix * Vector[1, 0, 1]
 			p = matrix.affine Vector[1, 0]
 			
@@ -101,11 +95,7 @@ class MatrixFactoryTest < Test::Unit::TestCase
 		end
 		
 		test 'rotate: center is indicated' do
-			stub(@factory.parser).parse {[
-				{key:'rotate', values:[-Math::PI/4, 1, 1]}
-			]}
-			
-			matrix = @factory.create ['dummy()']
+			matrix = @factory.create({key:'rotate', values:[-Math::PI/4, 1, 1]})
 			$test_logger.info('Factory:single_transform, rotate with center') {matrix}
 			p = matrix.affine Vector[1, 0]
 			
@@ -115,6 +105,97 @@ class MatrixFactoryTest < Test::Unit::TestCase
 	
 		end
 	end
-
 	
+end
+
+
+class TransformerTest < Test::Unit::TestCase
+	class StubTransformApplyer < TransformApplyerBase
+		def apply (svg_element, parse_result)
+			'stub'
+		end
+	end
+
+	def test_disable_skew
+		transformer = Transformer.new
+		applyer = StubTransformApplyer.new
+		stub(transformer.applyer_factory).create {applyer}
+		element_dummy = REXML::Element.new 'circle'
+
+		assert_nothing_raised do
+			transformer.apply_transforms element_dummy, [
+				{key: 'translate', values:[1,2]},
+				{key: 'skewX', values:[0.5]}
+			]
+		end	
+
+		applyer.disable_skew
+
+		assert_raise do
+			transformer.apply_transforms element_dummy, [
+				{key: 'skewX', values:[0.5]}
+			]
+		end
+
+		assert_raise do
+			transformer.apply_transforms element_dummy, [
+				{key: 'skewY', values:[0.5]}
+			]
+		end
+
+		skipped = transformer.apply_transforms element_dummy, [
+			{key: 'translate', values:[1,2]},
+			{key: 'skewY', values:[0.5]}
+		], false
+
+		assert_equal 1, skipped.length
+		assert_equal 'skewY', skipped[0][:key]
+
+	end
+
+	def test_set_transform_attribute
+		transformer = Transformer.new
+		
+		element = REXML::Element.new 'circle'
+		element.add_attribute 'transform', 'garbage'
+		transformer.set_transform_attribute element, [
+			{key: 'translate', values:[1,2]},
+			{key: 'skewY', values:[0.5]}
+		]
+		
+		transform_text = element.attribute('transform').value
+		assert_no_match /garbage/, transform_text, 'old data remains'
+		assert_not_nil /translate/.match(transform_text)
+		assert_not_nil /skewY/.match(transform_text)
+
+		transformer.set_transform_attribute element, []
+		assert element.attribute('transform').nil?
+
+
+	end
+
+end
+
+class TransformApplyer_circleTest < Test::Unit::TestCase
+	def test_apply_transform
+		applyer = TransformApplyer_circle.new
+		stub(applyer.helper).matrix_of {Matrix.affine_columns [
+			[2, 0],[0, 2],[0, 0]
+		]}
+		
+		element = REXML::Element.new 'circle'
+		element.add_attribute 'cx', 3
+		element.add_attribute 'cy', 5
+		element.add_attribute 'r' , 1
+
+		applyer.apply element, 'dummy (1,1)'
+
+		assert_float_attr = -> (expected, name) {
+			assert_float_eq expected, element.attribute(name).value.to_f
+		}
+		assert_float_attr [2, 'r']
+		assert_float_attr [6, 'cx']
+		assert_float_attr [10, 'cy']
+
+	end
 end

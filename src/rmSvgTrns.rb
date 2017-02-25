@@ -11,9 +11,15 @@ class Obj
 end
 
 class Matrix
+	def Matrix.affine_columns(cols)
+		affine_cols = cols.map {|col| col + [0]}
+		affine_cols[cols.length-1][cols[0].length] = 1
+		Matrix.columns affine_cols
+	end
+
 	def affine(vector)
 		if vector.count != column_count - 1
-			throw ArgumentError.new 'size mismatch'
+			raise ArgumentError, 'size mismatch'
 		end
 		self * (Vector.elements vector.to_a() + [1], false)
 	end
@@ -59,25 +65,19 @@ end
 
 
 class TransformMatrixFactory
-	attr_accessor :parser
 
-	def initialize()
-		@parser = TransformValueParser.new()
-	end
-	def create(transform_value_text)
-		matrices = @parser.parse(transform_value_text).map do |key_values|
-			eval "self._create_#{key_values[:key]} key_values[:values]"
-		end
-		matrices.reduce :*
+	def create(parse_result_item)
+		kv = parse_result_item
+		eval "self._create_#{kv[:key]} kv[:values]"
 	end
 
 	protected	
 
 	def _create_matrix(values)
-		Matrix.columns [
-			[values[0], values[1], 0],
-			[values[2], values[3], 0], 
-			[values[4], values[5], 1]
+		Matrix.affine_columns [
+			[values[0], values[1]],
+			[values[2], values[3]], 
+			[values[4], values[5]]
 		]
 	end
 
@@ -113,34 +113,177 @@ class TransformMatrixFactory
 
 end
 
+class TransformerHelper
+	def initialize(matrix_factory = TransformMatrixFactory.new())
+		@_matrix_factory = matrix_factory
+	end
+
+	# This method generates and delegates a matrix of merged tranform for given
+	# parse result of tranform attribute.
+	#
+	# parse_result:: output of TransformValueParser.parse()
+	# return:: generated matrix
+	# 
+	def matrix_of(parse_result)
+		(parse_result.map { |key_values|
+			@_matrix_factory.create(key_values)
+		}).reduce(:*)
+	end
+
+	def attr_to_float(elem, name)
+		elem.attribute(name).value().to_f()
+	end
+
+end
+
+class UnacceptableSVGTagError < StandardError
+end
+
+
+# facade
+class Transformer < HasLogger
+	attr_accessor :applyer_factory
+	
+	def initialize(log_dest = STDOUT)
+		super(log_dest)
+		@applyer_factory = TransformApplyerFactory.new
+	end
+	
+	def apply_transforms(svg_element,
+		parse_result, should_raise_for_disabled_transform = true)
+		
+		applyer = @applyer_factory.create svg_element.name
+
+		skipped = parse_result.reject do |key_values|
+			applyer.can_apply key_values[:key]
+		end
+		if skipped.length > 0
+			msg = "disabled transform: #{skipped.to_s}, on #{svg_element.to_s}"
+			if should_raise_for_disabled_transform
+				raise ArgumentError, msg
+			else
+				@logger.warn msg
+			end
+		end
+
+		applyer.apply svg_element, (
+			parse_result.select { |key_values|
+				applyer.can_apply key_values[:key]
+			})
+
+		skipped
+
+	end
+
+	def set_transform_attribute(svg_element, parse_result_items)
+		if parse_result_items.empty?
+			svg_element.delete_attribute 'transform'
+			return
+		end
+
+		transform_text = ''
+		parse_result_items.each do |kv|
+			v_text  = ''
+			kv[:values].each_with_index do |v, i|
+				v_text.concat v.to_s
+				v_text.concat ',' if i < kv[:values].length-1
+			end
+			transform_text.concat kv[:key] + '(' + v_text + ') '
+
+		end
+
+		svg_element.add_attribute 'transform', transform_text.strip
+	end
+
+		
+end
+
+
+class TransformApplyerFactory
+	def create(svg_tag)
+		begin
+			eval "TransformApplyer_#{svg_tag}.new"
+		rescue => e
+			raise UnacceptableSVGTagError.new("<#{svg_tag}> is not acceptable.")
+		end
+	end
+end
+
+class TransformApplyerBase
+	attr_accessor :helper
+	
+	def initialize()
+		@_can_apply = {
+			'matrix'   => true,
+			'translate'=> true,
+			'rotate'   => true,
+			'skewX'    => true,
+			'skewY'    => true
+		}
+		@helper = TransformerHelper.new()
+	end
+
+	def disable_skew
+		@_can_apply['skewX'] = false
+		@_can_apply['skewY'] = false
+	end
+
+	def can_apply(transform_name)
+		@_can_apply[transform_name]
+	end
+
+	def apply(svg_element, parse_result)
+		raise 'Not implemented! '+
+			'This method should transform svg_element attributes'
+	end
+
+end
+
+class ShapeTransformApplyerBase < TransformApplyerBase
+	def initialize()
+		super()
+		disable_skew
+	end
+end
+
+class TransformApplyer_circle < ShapeTransformApplyerBase
+	def apply(svg_element, parse_result)
+		matrix = @helper.matrix_of parse_result
+		
+		center = Vector.elements [
+			@helper.attr_to_float(svg_element, 'cx'),
+			@helper.attr_to_float(svg_element, 'cy')
+		]
+		v = matrix.affine center
+		svg_element.add_attribute 'cx', v[0]
+		svg_element.add_attribute 'cy', v[1]
+
+		p = center + (Vector.elements [
+			@helper.attr_to_float(svg_element, 'r'),
+			0
+		])
+		p = matrix.affine p
+		svg_element.add_attribute 'r', (p - v).norm
+	end
+end
+
 __END__
-
-class TransformableBase
-	def initialize(elem)
-		@_elem = elem
-	end
-
-class Transformable_path < TransformableBase
+class Transformer_path < TransformerBase
 	def apply(matrix)
 	end
 end
 
-class Transformable_circle < TransformableBase
+class Transformer_rect < TransformerBase
 	def apply(matrix)
 	end
 end
 
-class Transformable_rect < TransformableBase
+class Transformer_ellipse < TransformerBase
 	def apply(matrix)
 	end
 end
 
-class Transformable_ellipse < TransformableBase
-	def apply(matrix)
-	end
-end
-
-class Transformable_circle < TransformableBase
+class Transformer_circle < TransformerBase
 	def apply(matrix)
 	end
 end
@@ -151,31 +294,30 @@ class SVGTransformRemover
 		@_matrix_factory = TransformMatrixFactory.new()
 	end
 
-	def apply(svg_elem, parent_trans_matrix)
+	def apply(svg_elem, parent_trans_parse_result)
 		svg_elem.elements.each do |elem|
 			trans_attr = elem.attribute 'transform'
-			if trans_attr?
-				trans_matrix = parent_trans_matrix * @_matrix_factory.create(
-					trans_attr.value)
+			if Obj.exists? trans_attr
+				trans_parse_result = parent_trans_parse_result + @_parser.parse(trans_attr.value)
 			else
-				trans_matrix = parent_trans_matrix
+				trans_parse_result = @_parser.parse(trans_attr.value)
 			end
 
 			# assume that element doesn't have both child element and value.
 
 			if elem.has_elements? # => should be 'g' tag
-				self.apply elem, trans_matrix
+				self.apply elem, trans_parse_result
 			else
-				self._doTransform elem, trans_matrix
+				self._doTransform elem, trans_parse_result
 			end
 		end
 
 	end
 
 	# private
-	def _doTransform(elem, trans_matrix)
-		transformable = eval("Transformable_#{elem.name}").new(elem)
-		transformable.apply(trans_matrix)
+	def _doTransform(elem, trans_parse_result)
+		transformer = eval("Transformer_#{elem.name}").new(elem)
+		transformer.apply(trans_parse_result)
 	end
 end
 
