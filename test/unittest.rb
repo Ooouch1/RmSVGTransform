@@ -182,7 +182,7 @@ class TransformerTest < Test::Unit::TestCase
 end
 
 
-module TransformApplyerTestHelper
+module TransformApplyerTestUtil
 	def assert_float_attr(element, expected, name)
 		assert_float_eq expected, element.attribute(name).value.to_f
 	end
@@ -195,7 +195,7 @@ module TransformApplyerTestHelper
 end
 
 class PathTransformTest < Test::Unit::TestCase
-	include TransformApplyerTestHelper
+	include TransformApplyerTestUtil
 	
 	def assert_instruction(
 		expected_inst, expected_point_value_arrays, actual)
@@ -280,7 +280,7 @@ class PathTransformTest < Test::Unit::TestCase
 end
 
 class CircleTransformTest < Test::Unit::TestCase
-	include TransformApplyerTestHelper
+	include TransformApplyerTestUtil
 		
 	sub_test_case 'applyer for circle' do
 

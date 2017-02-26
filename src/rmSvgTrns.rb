@@ -114,7 +114,7 @@ class TransformMatrixFactory
 
 end
 
-class TransformerHelper
+class TransformHelper
 	def initialize(matrix_factory = TransformMatrixFactory.new())
 		@_matrix_factory = matrix_factory
 	end
@@ -131,7 +131,7 @@ class TransformerHelper
 		}).reduce(:*)
 	end
 
-	def attr_to_float(elem, name)
+	def float_attr(elem, name)
 		elem.attribute(name).value().to_f()
 	end
 
@@ -221,7 +221,7 @@ class TransformApplyerBase
 			'skewX'    => true,
 			'skewY'    => true
 		}
-		@helper = TransformerHelper.new()
+		@helper = TransformHelper.new()
 	end
 
 	def disable_skew
@@ -252,15 +252,15 @@ class TransformApplyer_circle < ShapeTransformApplyerBase
 		matrix = @helper.matrix_of parse_result
 		
 		center = Vector.elements [
-			@helper.attr_to_float(svg_element, 'cx'),
-			@helper.attr_to_float(svg_element, 'cy')
+			@helper.float_attr(svg_element, 'cx'),
+			@helper.float_attr(svg_element, 'cy')
 		]
 		v = matrix.affine(center)
 		svg_element.add_attribute 'cx', v[0]
 		svg_element.add_attribute 'cy', v[1]
 
 		p = center + (Vector.elements [
-			@helper.attr_to_float(svg_element, 'r'),
+			@helper.float_attr(svg_element, 'r'),
 			0
 		])
 		p = matrix.affine(p)
