@@ -10,6 +10,15 @@ class Obj
 	end
 end
 
+def proxy_if_nil(val, proxy)
+	if val.nil? then proxy else val end
+end
+
+def zero_if_nil(val)
+	proxy_if_nil(val, 0)
+end
+
+
 class Matrix
 	def Matrix.affine_columns(cols)
 		affine_cols = cols.map {|col| col + [0]}
@@ -83,25 +92,26 @@ class TransformMatrixFactory
 	end
 
 	def _create_translate(values)
-		self._create_matrix [1, 0, 0, 1, values[0], values[1]]
+		x = values[0]
+		y = zero_if_nil(values[1])
+		self._create_matrix [1, 0, 0, 1, x, y]
 	end
 
 	def _create_scale(values)
+		x = values[0]
+		y = proxy_if_nil(values[1], x)
 		self._create_matrix [values[0], 0, 0, values[1], 0, 0]
 	end
 
 	def _create_rotate(values)
 		cos_v = Math.cos values[0]
 		sin_v = Math.sin values[0]
-		x = values[1]
-		y = values[2]
+		x = zero_if_nil(values[1])
+		y = zero_if_nil(values[2])
 
 		rotate = self._create_matrix [cos_v, sin_v, -sin_v, cos_v, 0, 0]
-		if Obj.exists?(x) && Obj.exists?(y)
-			return  self._create_translate([x, y]) *
+		self._create_translate([x, y]) *
 				rotate * self._create_translate([-x, -y])
-		end
-		rotate
 	end
 	
 	def _create_skewX(values)
@@ -323,19 +333,15 @@ class TransformApplyer_path < TransformApplyerBase
 	end
 end
 
+
+class TransformApplyer_ellipse < TransformApplyerBase
+	def apply(svg_element, parse_result)
+	end
+end
+	
 __END__
 
 class Transformer_rect < TransformerBase
-	def apply(matrix)
-	end
-end
-
-class Transformer_ellipse < TransformerBase
-	def apply(matrix)
-	end
-end
-
-class Transformer_circle < TransformerBase
 	def apply(matrix)
 	end
 end
@@ -349,10 +355,10 @@ class SVGTransformRemover
 	def apply(svg_elem, parent_trans_parse_result)
 		svg_elem.elements.each do |elem|
 			trans_attr = elem.attribute 'transform'
-			if Obj.exists? trans_attr
-				trans_parse_result = parent_trans_parse_result + @_parser.parse(trans_attr.value)
+			if trans_attr.nil?
+				trans_parse_result = parent_trans_parse_result
 			else
-				trans_parse_result = @_parser.parse(trans_attr.value)
+				trans_parse_result = parent_trans_parse_result + @_parser.parse(trans_attr.value)
 			end
 
 			# assume that element doesn't have both child element and value.
@@ -360,16 +366,17 @@ class SVGTransformRemover
 			if elem.has_elements? # => should be 'g' tag
 				self.apply elem, trans_parse_result
 			else
-				self._doTransform elem, trans_parse_result
+				self._do_transform elem, trans_parse_result
 			end
 		end
 
 	end
 
 	# private
-	def _doTransform(elem, trans_parse_result)
-		transformer = eval("Transformer_#{elem.name}").new(elem)
-		transformer.apply(trans_parse_result)
+	def _do_transform(elem, trans_parse_result)
+		transformer = Transformer.new
+		skipped = transformer.apply_transform(elem, trans_parse_result)
+		transformer.set_transform_attribute skipped
 	end
 end
 

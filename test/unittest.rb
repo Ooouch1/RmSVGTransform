@@ -59,6 +59,9 @@ class ParserTest < Test::Unit::TestCase
 	end
 end
 
+def assert_matrix_element(v, matrix, i, j) 
+	assert_equal v, matrix[i, j], "@#{i} , #{j}"
+end
 
 class MatrixFactoryTest < Test::Unit::TestCase
 	sub_test_case 'single_transform' do
@@ -70,21 +73,17 @@ class MatrixFactoryTest < Test::Unit::TestCase
 			matrix = @factory.create({key:'matrix', values:[0,1,2,3,4,5]})
 			$test_logger.info('Factory:single_transform, matrix') {matrix}
 
-			assert_elem = -> (v, i, j) {
-				assert_equal v, matrix[i, j], '@'+ i.to_s() +',' + j.to_s()
-			}
+			assert_matrix_element 0, matrix, 0,0
+			assert_matrix_element 1, matrix, 1,0
+			assert_matrix_element 0, matrix, 2,0
 
-			assert_elem [0, 0,0]
-			assert_elem [1, 1,0]
-			assert_elem [0, 2,0]
+			assert_matrix_element 2, matrix, 0,1
+			assert_matrix_element 3, matrix, 1,1
+			assert_matrix_element 0, matrix, 2,1
 
-			assert_elem [2, 0,1]
-			assert_elem [3, 1,1]
-			assert_elem [0, 2,1]
-
-			assert_elem [4, 0,2]
-			assert_elem [5, 1,2]
-			assert_elem [1, 2,2]
+			assert_matrix_element 4, matrix, 0,2
+			assert_matrix_element 5, matrix, 1,2
+			assert_matrix_element 1, matrix, 2,2
 		end
 
 		test 'rotate: center is origin' do
@@ -114,6 +113,30 @@ class MatrixFactoryTest < Test::Unit::TestCase
 end
 
 
+class TransformHelperTest < Test::Unit::TestCase
+	def setup
+		@helper = TransformHelper.new
+	end
+
+	def test_matrix_of
+		parse_result = [
+			{key: 'matrix', values: [2, 0, 0, 3, 0, 0]},
+			{key: 'translate', values: [1, 4]}
+		]
+		matrix = @helper.matrix_of(parse_result)
+		assert_matrix_element  2, matrix, 0,0
+		assert_matrix_element  0, matrix, 1,0
+		assert_matrix_element  0, matrix, 0,1
+		assert_matrix_element  3, matrix, 1,1
+		assert_matrix_element  2, matrix, 0,2
+		assert_matrix_element 12, matrix, 1,2
+
+		assert_matrix_element 0, matrix, 2,0
+		assert_matrix_element 0, matrix, 2,1
+		assert_matrix_element 1, matrix, 2,2
+	end
+end
+
 class TransformerTest < Test::Unit::TestCase
 	class StubTransformApplyer < TransformApplyerBase
 		def apply (svg_element, parse_result)
@@ -121,7 +144,7 @@ class TransformerTest < Test::Unit::TestCase
 		end
 	end
 
-	def test_disable_skew
+	def test_effect_of_applyers_disable_skew
 		transformer = Transformer.new
 		applyer = StubTransformApplyer.new
 		stub(transformer.applyer_factory).create {applyer}
@@ -139,7 +162,7 @@ class TransformerTest < Test::Unit::TestCase
 		assert_raise do
 			transformer.apply_transforms element_dummy, [
 				{key: 'skewX', values:[0.5]}
-			]
+			], true
 		end
 
 		assert_raise do
