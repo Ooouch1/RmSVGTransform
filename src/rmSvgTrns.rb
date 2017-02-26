@@ -21,7 +21,8 @@ class Matrix
 		if vector.count != column_count - 1
 			raise ArgumentError, 'size mismatch'
 		end
-		self * (Vector.elements vector.to_a() + [1], false)
+		computed = self * Vector.elements(vector.to_a() + [1], false)
+		Vector.elements [computed[0], computed[1]]
 	end
 end
 
@@ -40,9 +41,9 @@ end
 class TransformValueParser < HasLogger
 
 	def parse(transform_value_text)
-		self.scan(transform_value_text).map do |child_trans|
-			self.match_data_to_key_value  child_trans
-		end
+		self.scan(transform_value_text).map { |child_trans|
+			self.match_data_to_key_value(child_trans)
+		}
 	end
 
 	# private
@@ -154,9 +155,9 @@ class Transformer < HasLogger
 		
 		applyer = @applyer_factory.create svg_element.name
 
-		skipped = parse_result.reject do |key_values|
-			applyer.can_apply key_values[:key]
-		end
+		skipped = parse_result.reject { |key_values|
+			applyer.can_apply(key_values[:key])
+		}
 		if skipped.length > 0
 			msg = "disabled transform: #{skipped.to_s}, on #{svg_element.to_s}"
 			if should_raise_for_disabled_transform
@@ -168,7 +169,7 @@ class Transformer < HasLogger
 
 		applyer.apply svg_element, (
 			parse_result.select { |key_values|
-				applyer.can_apply key_values[:key]
+				applyer.can_apply(key_values[:key])
 			})
 
 		skipped
@@ -254,7 +255,7 @@ class TransformApplyer_circle < ShapeTransformApplyerBase
 			@helper.attr_to_float(svg_element, 'cx'),
 			@helper.attr_to_float(svg_element, 'cy')
 		]
-		v = matrix.affine center
+		v = matrix.affine(center)
 		svg_element.add_attribute 'cx', v[0]
 		svg_element.add_attribute 'cy', v[1]
 
@@ -262,16 +263,67 @@ class TransformApplyer_circle < ShapeTransformApplyerBase
 			@helper.attr_to_float(svg_element, 'r'),
 			0
 		])
-		p = matrix.affine p
+		p = matrix.affine(p)
 		svg_element.add_attribute 'r', (p - v).norm
 	end
 end
 
-__END__
-class Transformer_path < TransformerBase
-	def apply(matrix)
+class PathDataCodec
+	@@REG_NUM_STR = "[+-]?\\d+(\\.\\d+)?"
+	def decode_path_data(path_data_text)
+		reg = /(((\w)((\s|,)*#{@@REG_NUM_STR})+)|[zZ])/
+		instruction_texts = path_data_text.scan(reg).map {|m| m[0]}
+		instruction_texts.map {|t| decode_instruction_text(t)}
+	end
+
+	def decode_instruction_text(text)
+		values = (text.scan /(#{@@REG_NUM_STR})/).map {|m| m[0].to_f}
+
+		value_pairs = values.values_at(
+			* values.each_index.select {|i| i.even?}).zip(
+			values.values_at(* values.each_index.select {|i| i.odd?}))
+		
+		{
+			instruction: text[0],
+			points: value_pairs.map {|pair| Vector.elements pair}
+		}
+	end
+
+	def encode_path_data(instructions)
+		encoded = instructions.reduce('') { |path_data, inst|
+			path_data +" #{inst[:instruction]}" +
+				inst[:points].reduce('') {|text, point|
+					text + " #{point[0]},#{point[1]}"
+			}
+		}
+		encoded.strip
+	end
+
+end
+
+class TransformApplyer_path < TransformApplyerBase
+	attr_accessor :codec
+
+	def initialize
+		@codec = PathDataCodec.new
+	end
+
+	def apply(svg_element, parse_result)
+		instructions = @codec.decode_path_data(svg_element.attribute('d').value)
+		matrix = @helper.matrix_of(parse_result)
+
+		instructions.each do |inst|
+			inst[:points].map! do |point|
+				matrix.affine point
+			end
+		end
+
+		@codec.encode_path_data(instructions)
+
 	end
 end
+
+__END__
 
 class Transformer_rect < TransformerBase
 	def apply(matrix)

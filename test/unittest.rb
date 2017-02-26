@@ -20,6 +20,11 @@ def assert_float_eq(expected, actual, msg = '')
 	assert (actual - expected).abs < EPS, msg + 
 		', expected:' + expected.to_s() + ' actual:' + actual.to_s
 end
+
+
+def vec(x, y)
+	Vector.elements [x,y]
+end
 	
 class ParserTest < Test::Unit::TestCase
 	def create_parser
@@ -176,26 +181,126 @@ class TransformerTest < Test::Unit::TestCase
 
 end
 
-class TransformApplyer_circleTest < Test::Unit::TestCase
-	def test_apply_transform
-		applyer = TransformApplyer_circle.new
-		stub(applyer.helper).matrix_of {Matrix.affine_columns [
+
+module TransformApplyerTestHelper
+	def assert_float_attr(element, expected, name)
+		assert_float_eq expected, element.attribute(name).value.to_f
+	end
+
+	def stub_helper_matrix_of_enlarge_twice(helper)
+		stub(helper).matrix_of {Matrix.affine_columns [
 			[2, 0],[0, 2],[0, 0]
 		]}
-		
-		element = REXML::Element.new 'circle'
-		element.add_attribute 'cx', 3
-		element.add_attribute 'cy', 5
-		element.add_attribute 'r' , 1
-
-		applyer.apply element, 'dummy (1,1)'
-
-		assert_float_attr = -> (expected, name) {
-			assert_float_eq expected, element.attribute(name).value.to_f
-		}
-		assert_float_attr [2, 'r']
-		assert_float_attr [6, 'cx']
-		assert_float_attr [10, 'cy']
-
 	end
 end
+
+class PathTransformTest < Test::Unit::TestCase
+	include TransformApplyerTestHelper
+	
+	def assert_instruction(
+		expected_inst, expected_point_value_arrays, actual)
+		
+		assert_equal expected_inst, actual[:instruction]
+		assert_array_equal expected_point_value_arrays.map { |p|
+			Vector.elements p}, actual[:points]
+	end
+	def assert_instructions(expectations, instructions)
+		assert_equal expectations.length, instructions.length
+		expectations.each_with_index do |ex, i|
+			assert_instruction ex[0], ex[1], instructions[i]
+		end
+	end
+
+	def setup
+		@codec = PathDataCodec.new
+	end
+
+	sub_test_case 'decode path M(0,1)(3,4)(5,6)' do
+		setup do
+			@answer = [['M', [[0,1], [3,4], [5,6]]]]
+		end
+
+		def test_decode
+			instructions = @codec.decode_path_data("M 0,1 3,4 5,6")
+			assert_instructions @answer, instructions
+		end
+	end
+
+	
+	sub_test_case 'decode path M(1,2) L(3,4)(5,6) z' do
+		setup do
+			@answer = [['M', [[1,2]]], ['L', [[3,4], [5,6]]], ['z', []]]
+		end
+
+		def test_comma_separation_and_space_for_value_style
+			instructions = @codec.decode_path_data("M 1 2, L 3 4 5 6, z")
+			assert_instructions @answer, instructions
+		end
+
+		def test_space_separation_and_comma_for_value_style
+			instructions = @codec.decode_path_data("M1,2 L 3,4,5,6z")
+			assert_instructions @answer, instructions
+		end
+	end
+
+	sub_test_case 'encode path M(1,2) L(3,4)(5,6) z' do
+		def test_encode
+			instructions = [
+				{instruction: 'M', points: [vec(1,2)]},
+				{instruction: 'L', points: [vec(3,4), vec(5,6)]},
+				{instruction: 'z', points: []}
+			]
+			text = @codec.encode_path_data(instructions)
+			assert_equal 'M 1,2 L 3,4 5,6 z', text
+		end
+	end
+
+	sub_test_case 'applyer for path' do
+		def test_apply_enlarge
+			applyer = TransformApplyer_path.new
+			stub_helper_matrix_of_enlarge_twice applyer.helper
+
+			element = REXML::Element.new 'path'
+			element.add_attribute 'd', 'm 1,2 3,4 l 5,6'
+
+
+			stub(applyer.codec).encode_path_data { |instructions|
+				# inject assertion of the method parameter
+				assert_instructions [
+					# point cooridate values should be twiced
+					['m', [vec(2.0, 4.0), vec(6.0,8.0)]],
+					['l', [vec(10.0, 12.0)]]
+				], instructions
+			}
+			
+			applyer.apply element, 'dummy (^_-)'
+		end
+	end
+
+end
+
+class CircleTransformTest < Test::Unit::TestCase
+	include TransformApplyerTestHelper
+		
+	sub_test_case 'applyer for circle' do
+
+		def test_apply_enlarge
+			applyer = TransformApplyer_circle.new
+			stub_helper_matrix_of_enlarge_twice applyer.helper
+			
+			element = REXML::Element.new 'circle'
+			element.add_attribute 'cx', 3
+			element.add_attribute 'cy', 5
+			element.add_attribute 'r' , 1
+
+			applyer.apply element, 'dummy (1,1)'
+
+			assert_float_attr element,  2, 'r'
+			assert_float_attr element,  6, 'cx'
+			assert_float_attr element, 10, 'cy'
+		end
+	end
+
+
+end
+
