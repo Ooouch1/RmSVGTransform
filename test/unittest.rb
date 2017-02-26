@@ -1,4 +1,4 @@
-require '../src/rmSvgTrns'
+require_relative '../src/rmSvgTrns'
 
 require 'test/unit'
 require 'test/unit/rr' # not a default package

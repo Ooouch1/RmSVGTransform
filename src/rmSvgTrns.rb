@@ -1,39 +1,12 @@
+
+
 require 'matrix'
+require_relative 'matrix_ext'
+require_relative 'object_ext'
+
 require 'rexml/document'
 require 'logger'
 
-class Obj 
-	class << self
-		def exists?(obj)
-			!(obj.nil? || (defined? obj).nil?)
-		end
-	end
-end
-
-def proxy_if_nil(val, proxy)
-	if val.nil? then proxy else val end
-end
-
-def zero_if_nil(val)
-	proxy_if_nil(val, 0)
-end
-
-
-class Matrix
-	def Matrix.affine_columns(cols)
-		affine_cols = cols.map {|col| col + [0]}
-		affine_cols[cols.length-1][cols[0].length] = 1
-		Matrix.columns affine_cols
-	end
-
-	def affine(vector)
-		if vector.count != column_count - 1
-			raise ArgumentError, 'size mismatch'
-		end
-		computed = self * Vector.elements(vector.to_a() + [1], false)
-		Vector.elements [computed[0], computed[1]]
-	end
-end
 
 class HasLogger
 	attr_accessor :logger
@@ -93,21 +66,21 @@ class TransformMatrixFactory
 
 	def _create_translate(values)
 		x = values[0]
-		y = zero_if_nil(values[1])
+		y = values[1].zero_if_nil
 		self._create_matrix [1, 0, 0, 1, x, y]
 	end
 
 	def _create_scale(values)
 		x = values[0]
-		y = proxy_if_nil(values[1], x)
+		y = values[1].proxy_if_nil(x)
 		self._create_matrix [values[0], 0, 0, values[1], 0, 0]
 	end
 
 	def _create_rotate(values)
 		cos_v = Math.cos values[0]
 		sin_v = Math.sin values[0]
-		x = zero_if_nil(values[1])
-		y = zero_if_nil(values[2])
+		x = values[1].zero_if_nil
+		y = values[2].zero_if_nil
 
 		rotate = self._create_matrix [cos_v, sin_v, -sin_v, cos_v, 0, 0]
 		self._create_translate([x, y]) *
