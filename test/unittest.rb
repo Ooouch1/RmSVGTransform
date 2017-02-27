@@ -112,8 +112,17 @@ class MatrixFactoryTest < Test::Unit::TestCase
 	
 end
 
+module DOMTestUtil
+	def assert_float_attr(element, expected, name)
+		if expected.nil? then assert_nil element.attribute(name)
+		else assert_float_eq expected, element.attribute(name).value.to_f
+		end
+	end
+end
 
 class TransformHelperTest < Test::Unit::TestCase
+	include DOMTestUtil
+
 	def setup
 		@helper = TransformHelper.new
 	end
@@ -134,6 +143,37 @@ class TransformHelperTest < Test::Unit::TestCase
 		assert_matrix_element 0, matrix, 2,0
 		assert_matrix_element 0, matrix, 2,1
 		assert_matrix_element 1, matrix, 2,2
+	end
+
+	sub_test_case 'test transform_x_length' do
+		def test_usual_case
+			element = REXML::Element.new('rect')
+			element.add_attribute 'width', 1.2
+			w = @helper.transform_x_length(
+				element, 'width', Matrix.affine_columns(
+					[[2,0], [0,3], [0,0]]
+				))
+			assert_float_attr element, 2.4, 'width'
+
+		end
+
+		def test_proxy_used
+			element = REXML::Element.new('rect')
+			w = @helper.transform_x_length(
+				element, 'width', Matrix.affine_columns(
+					[[2,0], [0,3], [0,0]]
+				), 10)
+			assert_float_attr element, 10, 'width'
+		end
+
+		def test_proxy_is_also_nil
+			element = REXML::Element.new('rect')
+			w = @helper.transform_x_length(
+				element, 'width', Matrix.affine_columns(
+					[[2,0], [0,3], [0,0]]
+				), nil)
+			assert_float_attr element, nil, 'width'
+		end
 	end
 end
 
@@ -204,11 +244,8 @@ class TransformerTest < Test::Unit::TestCase
 
 end
 
-
 module TransformApplyerTestUtil
-	def assert_float_attr(element, expected, name)
-		assert_float_eq expected, element.attribute(name).value.to_f
-	end
+	include DOMTestUtil
 
 	def stub_helper_matrix_of_enlarge_twice(helper)
 		stub(helper).matrix_of {Matrix.affine_columns [
@@ -302,7 +339,7 @@ class PathTransformTest < Test::Unit::TestCase
 
 end
 
-class CircleTransformTest < Test::Unit::TestCase
+class ShapeTransformTest < Test::Unit::TestCase
 	include TransformApplyerTestUtil
 		
 	sub_test_case 'applyer for circle' do
@@ -318,12 +355,66 @@ class CircleTransformTest < Test::Unit::TestCase
 
 			applyer.apply element, 'dummy (1,1)'
 
-			assert_float_attr element,  2, 'r'
 			assert_float_attr element,  6, 'cx'
 			assert_float_attr element, 10, 'cy'
+			assert_float_attr element,  2, 'r'
 		end
 	end
 
+	sub_test_case 'applyer for rect' do
 
+		def test_apply_enlarge_rx_ry_exists
+			applyer = TransformApplyer_rect.new
+			stub_helper_matrix_of_enlarge_twice applyer.helper
+			
+			element = REXML::Element.new 'rect'
+			element.add_attribute 'x', 3
+			element.add_attribute 'y', 5
+			element.add_attribute 'rx' , 1
+			element.add_attribute 'ry' , 1.2
+			element.add_attribute 'width' ,  2 
+			element.add_attribute 'height' , 7 
+
+			applyer.apply element, 'dummy (1,1)'
+
+			assert_float_attr element,  6, 'x'
+			assert_float_attr element, 10, 'y'
+			assert_float_attr element,  2, 'rx'
+			assert_float_attr element,2.4, 'ry'
+			assert_float_attr element,  4, 'width'
+			assert_float_attr element, 14, 'height'
+		end
+		
+		def test_apply_enlarge_only_rx_or_ry_exists
+			applyer = TransformApplyer_rect.new
+			stub_helper_matrix_of_enlarge_twice applyer.helper
+			
+			element = REXML::Element.new 'rect'
+			
+			element.add_attribute 'rx' , 1
+			applyer.apply element, 'dummy (1,1)'
+			assert_float_attr element,  2, 'rx'
+			assert_float_attr element,  2, 'ry'
+
+			element.delete_attribute 'rx'
+
+			element.add_attribute 'ry', 3
+			applyer.apply element, 'dummy (1,1)'
+			assert_float_attr element,  6, 'rx'
+			assert_float_attr element,  6, 'ry'
+		end
+
+		def test_apply_enlarge_rx_and_ry_dont_exists
+			applyer = TransformApplyer_rect.new
+			stub_helper_matrix_of_enlarge_twice applyer.helper
+			
+			element = REXML::Element.new 'rect'
+			
+			applyer.apply element, 'dummy (1,1)'
+			assert_float_attr element,  0, 'rx'
+			assert_float_attr element,  0, 'ry'
+
+		end
+	end
 end
 
