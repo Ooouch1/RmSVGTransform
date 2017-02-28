@@ -5,10 +5,15 @@ require_relative 'object_ext'
 require 'rexml/document'
 require 'logger'
 
-transform_ignorable_element_names = [
-	'g', 'clipPath', 'defs', 'marker'
-]
+class GlobalInFile
+	@@IGNORABLES = ['g', 'clipPath', 'defs', 'marker'].freeze
+	class << self
+		def transform_ignorable_element_names
+			@@IGNORABLES
+		end
+	end
 
+end
 
 class HasLogger
 	attr_accessor :logger
@@ -26,7 +31,12 @@ class TransformValueParser < HasLogger
 
 	def parse(transform_value_text)
 		self.scan(transform_value_text).map { |child_trans|
-			self.match_data_to_key_value(child_trans)
+			kv = self.match_data_to_key_value(child_trans)
+			if kv.include?(nil)
+				raise ArgumentError, transform_value_text +
+					" parse result is: #{kv.to_s}"
+			end
+			kv
 		}
 	end
 
@@ -117,8 +127,9 @@ class Transformer < HasLogger
 	
 		begin
 			applyer = @applyer_factory.create svg_element.name
+			@logger.info('create applyer: ') {applyer}
 		rescue UnacceptableSVGTagError => e
-			@logger.warn e if ! transform_ignorable_element_names.include?(svg_element.name)
+			@logger.warn e if ! GlobalInFile.transform_ignorable_element_names.include?(svg_element.name)
 			return []
 		end
 		skipped = parse_result.reject { |key_values|
@@ -178,6 +189,7 @@ class TransformApplyerFactory
 end
 
 class TransformHelper
+
 	def initialize(matrix_factory = TransformMatrixFactory.new())
 		@_matrix_factory = matrix_factory
 	end
@@ -189,6 +201,9 @@ class TransformHelper
 	# return:: generated matrix
 	# 
 	def matrix_of(parse_result)
+		if parse_result.nil? || parse_result.empty?
+			return Matrix.I(3)
+		end
 		(parse_result.map { |key_values|
 			@_matrix_factory.create(key_values)
 		}).reduce(:*)
@@ -214,9 +229,7 @@ class TransformHelper
 	def _compute_length(elem, attr_name, dim, matrix)
 		length = float_attr(elem, attr_name)
 		return nil if length.nil?
-		values = Array.new(2, 0)
-		values[dim] = length
-		matrix.affine(Vector.elements(values)).norm
+		matrix.affine_length(length, dim)
 
 	end
 
@@ -240,9 +253,10 @@ class TransformHelper
 
 end
 
-
 class TransformApplyerBase
 	attr_accessor :helper
+	attr_reader :_can_apply
+	private :_can_apply
 	
 	def initialize()
 		@_can_apply = {
@@ -335,24 +349,8 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 
 end
 
-
-
-class TransformApplyer_circle < ShapeTransformApplyerBase
-	def _apply(svg_element, matrix)
-		_transform_cx_cy svg_element, matrix
-		_transform_r svg_element, matrix	
-	end
-end
-
-class TransformApplyer_ellipse < ShapeTransformApplyerBase
-	def _apply(svg_element, matrix)
-		_transform_cx_cy svg_element, matrix
-		_transform_rx_ry svg_element, matrix
-	end
-end
-	
 class PathDataCodec
-	@@REG_NUM_STR = "[+-]?\\d+(\\.\\d+)?"
+	@@REG_NUM_STR = "[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?"
 	def decode_path_data(path_data_text)
 		reg = /(((\w)((\s|,)*#{@@REG_NUM_STR})+)|[zZ])/
 		instruction_texts = path_data_text.scan(reg).map {|m| m[0]}
@@ -388,10 +386,28 @@ class PathDataCodec
 
 end
 
+
+
+
+class TransformApplyer_circle < ShapeTransformApplyerBase
+	def _apply(svg_element, matrix)
+		_transform_cx_cy svg_element, matrix
+		_transform_r svg_element, matrix	
+	end
+end
+
+class TransformApplyer_ellipse < ShapeTransformApplyerBase
+	def _apply(svg_element, matrix)
+		_transform_cx_cy svg_element, matrix
+		_transform_rx_ry svg_element, matrix
+	end
+end
+
 class TransformApplyer_path < TransformApplyerBase
 	attr_accessor :codec
 
 	def initialize
+		super
 		@codec = PathDataCodec.new
 	end
 
@@ -399,10 +415,14 @@ class TransformApplyer_path < TransformApplyerBase
 		instructions = @codec.decode_path_data(
 			svg_element.attribute('d').value)
 
-		instructions.each do |inst|
-			inst[:points].map! do |point|
-				matrix.affine(point)
+		begin
+			instructions.each do |inst|
+				inst.apply! matrix
 			end
+		rescue => e
+			raise ArgumentError, 
+				"cannot transform instructions #{instructions.to_s} " +
+				"by matrix #{matrix.to_s}\n"+"original error: " + e.message
 		end
 
 		@codec.encode_path_data(instructions)
@@ -421,8 +441,10 @@ class TransformApplyer_rect < ShapeTransformApplyerBase
 end
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
-		_transform_x_y svg_element, matrix
-		_transform_width_height svg_element, matrix
+		if svg_element.attribute('maskUnits').nil?
+			_transform_x_y svg_element, matrix
+			_transform_width_height svg_element, matrix
+		end
 	end
 end
 
@@ -438,9 +460,16 @@ end
 class TransformApplyer_tspan < TransformApplyer_text
 end
 
-class SVGTransformRemover
-	def initialize
+class SVGTransformRemover < HasLogger
+	def initialize(log_dest = STDOUT)
+		super(log_dest)
+		
+		@transformer = Transformer.new
 		@parser = TransformValueParser.new
+	
+		@transformer.logger = @logger
+		@parser.logger = @logger
+	
 	end
 
 	def apply(svg_elem, parent_trans_parse_result = [])
@@ -462,9 +491,13 @@ class SVGTransformRemover
 
 	# private
 	def _do_transform(elem, trans_parse_result)
-		transformer = Transformer.new
-		skipped = transformer.apply_transform(elem, trans_parse_result)
-		transformer.set_transform_attribute skipped
+		begin
+			skipped = @transformer.apply_transforms(elem, trans_parse_result)
+			@transformer.set_transform_attribute elem, skipped
+		rescue => e
+			@transformer.logger.error e
+			raise e
+		end
 	end
 end
 
