@@ -32,6 +32,12 @@ module PathInstruction
 	end
 
 	class InstructionBase
+		def initialize(instruction_char, instruction_order = -1)
+			@instruction = SingleValue.new(instruction_char)
+			@_relative_coord = (instruction_char == instruction_char.downcase)
+			@_first_instruction = (instruction_order == 0) 
+		end
+
 		def encode
 			(to_a.map {|token| token.encode}).join(' ')
 		end
@@ -47,12 +53,33 @@ module PathInstruction
 			#	* values.each_index.select {|i| i.even?}).zip(
 			#	values.values_at(* values.each_index.select {|i| i.odd?}))
 		end
+
+		def apply_to_coord(matrix, coord_token, index = -1)
+			if @_first_instruction && index == 0
+				coord_token.value = matrix.affine(
+					coord_token.value)
+			else
+				coord_token.value = matrix.affine(
+					coord_token.value, @_relative_coord)
+			end
+		end
+
+		def apply_to_length(matrix, length_token)
+			length_token.value = matrix.affine_length(length_token.value)
+		end
+		
+		def apply_to_lengths(matrix, lengths_token)
+			lengths_token.value = matrix.affine_lengths(lengths_token.value)
+		end
 	end
 
 	class Arc < InstructionBase
 		
-		def initialize(instruction_char, values)
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, instruction_order)
+
 			@instruction = SingleValue.new(instruction_char)
+			@relative_coord = (instruction_char == instruction_char.downcase)
 			
 			@value_sets = []
 
@@ -67,10 +94,8 @@ module PathInstruction
 
 		def apply!(matrix)
 			@value_sets.each do |v_set|
-				v_set[:length_pair].value = matrix.affine_lengths(
-					v_set[:length_pair].value)
-				v_set[:point].value = matrix.affine(
-					v_set[:point].value)
+				apply_to_lengths matrix, v_set[:length_pair]
+				apply_to_coord   matrix, v_set[:point]
 			end	
 		end
 
@@ -91,16 +116,16 @@ module PathInstruction
 
 	class MultiPoint < InstructionBase
 		
-		def initialize(instruction_char, values)
-			@instruction = SingleValue.new(instruction_char)
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, instruction_order)
 			@points = slice_to_2D_coords(values).map { |coord|
 				Sequence.new(Vector.elements coord)
 			}
 		end
 
 		def apply!(matrix)
-			@points.each do |point|
-				point.value = matrix.affine(point.value)
+			@points.each_with_index do |point, i|
+				apply_to_coord matrix, point, i
 			end
 		end
 
@@ -116,13 +141,14 @@ module PathInstruction
 	class Unary < InstructionBase
 		
 		def initialize(instruction_char, values, dim)
-			@instruction = SingleValue.new(instruction_char)
+			super(instruction_char)
 			@dim = dim
 			@coord = SingleValue.new(values.last)
 		end
 
 		def apply!(matrix)
-			@coord.value = matrix.affine_length(@coord.value, dim)
+			apply_to_length matrix, @coord 
+			#TODO fix to use apply_to_coord. it needs to receive current pen position...
 		end
 
 		def encode
@@ -139,8 +165,9 @@ module PathInstruction
 	end
 
 	class Parameterless < InstructionBase
-		def initialize(instruction_char)
-			@instruction = SingleValue.new(instruction_char)
+		def initialize(instruction_char, value_dummy = nil,
+					   instruction_order_dummy = nil)
+			super(instruction_char)
 		end
 
 		def apply!(matrix)
@@ -175,12 +202,12 @@ module PathData
 	end
 
 	class InstructionH < PathInstruction::Unary
-		def initialize(instruction_char, values)
+		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, values, 0)
 		end
 	end
 	class InstructionV < PathInstruction::Unary
-		def initialize(instruction_char, values)
+		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, values, 1)
 		end
 	end
@@ -191,9 +218,9 @@ module PathData
 
 
 	class InstructionFactory
-		def create(instruction_char, values)
+		def create(instruction_char, values, instruction_order)
 			clss = eval "Instruction#{instruction_char.upcase}"
-			clss.new(instruction_char, values)
+			clss.new(instruction_char, values, instruction_order)
 		end
 	end
 
@@ -207,18 +234,21 @@ module PathData
 		def decode_path_data(path_data_text)
 			reg = /(((\w)((\s|,)*#{@@REG_NUM_STR})*))/
 			instruction_texts = longest_matches(path_data_text, reg)
-			instruction_texts.map {|t| decode_instruction_text(t)}
+			instruction_texts.each_with_index.map { |t, i|
+				decode_instruction_text(t, i)
+			}
 		end
 
-		def decode_instruction_text(text)
+		def decode_instruction_text(text, instruction_order)
 			values = longest_matches(text, /(#{@@REG_NUM_STR})/)
 			.map {|m| m.to_f}
 
-			@instruction_factory.create(text[0], values)
+			@instruction_factory.create(text[0], values, instruction_order)
 		end
 
 		def encode_path_data(instructions)
-			(instructions.map {|inst| inst.encode}).join(' ')
+			texts = instructions.map {|inst| inst.encode}
+			texts.join(' ')
 		end
 
 		private

@@ -1,15 +1,21 @@
 require 'matrix'
 require_relative 'matrix_ext'
 require_relative 'object_ext'
+require_relative 'pathdata'
 
 require 'rexml/document'
 require 'logger'
 
-class GlobalInFile
-	@@IGNORABLES = ['g', 'clipPath', 'defs', 'marker'].freeze
+class TransformSetting
+	@@IGNORABLES = ['svg', 'g', 'clipPath', 'defs', 'marker'].freeze
+	@@SKIPPABLES = ['metadata'].freeze
 	class << self
 		def transform_ignorable_element_names
 			@@IGNORABLES
+		end
+		
+		def non_svg_element_names
+			@@SKIPPABLES
 		end
 	end
 
@@ -124,12 +130,15 @@ class Transformer < HasLogger
 	
 	def apply_transforms(svg_element,
 		parse_result, should_raise_for_disabled_transform = true)
-	
+
+		elem_name = svg_element.name
+		
+
 		begin
-			applyer = @applyer_factory.create svg_element.name
-			@logger.info('create applyer: ') {applyer}
+			applyer = @applyer_factory.create elem_name
+			@logger.debug('create applyer: ') {applyer}
 		rescue UnacceptableSVGTagError => e
-			@logger.warn e if ! GlobalInFile.transform_ignorable_element_names.include?(svg_element.name)
+			@logger.warn e if ! TransformSetting.transform_ignorable_element_names.include?(elem_name)
 			return []
 		end
 		skipped = parse_result.reject { |key_values|
@@ -349,46 +358,6 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 
 end
 
-class PathDataCodec
-	@@REG_NUM_STR = "[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?"
-	def decode_path_data(path_data_text)
-		reg = /(((\w)((\s|,)*#{@@REG_NUM_STR})+)|[zZ])/
-		instruction_texts = path_data_text.scan(reg).map {|m| m[0]}
-		instruction_texts.map {|t| decode_instruction_text(t)}
-	end
-
-	def slice_to_2D_coords(values)
-		values.values_at(
-			* values.each_index.select {|i| i.even?}).zip(
-			values.values_at(* values.each_index.select {|i| i.odd?}))
-	end
-
-	def decode_instruction_text(text)
-		values = (text.scan /(#{@@REG_NUM_STR})/).map {|m| m[0].to_f}
-		
-		{
-			instruction: text[0],
-			points: slice_to_2D_coords(values).map { |coord|
-				Vector.elements coord
-			}
-		}
-	end
-
-	def encode_path_data(instructions)
-		encoded = instructions.reduce('') { |path_data, inst|
-			path_data +" #{inst[:instruction]}" +
-				inst[:points].reduce('') {|text, point|
-					text + " #{point[0]},#{point[1]}"
-			}
-		}
-		encoded.strip
-	end
-
-end
-
-
-
-
 class TransformApplyer_circle < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
 		_transform_cx_cy svg_element, matrix
@@ -408,7 +377,7 @@ class TransformApplyer_path < TransformApplyerBase
 
 	def initialize
 		super
-		@codec = PathDataCodec.new
+		@codec = PathData::Codec.new
 	end
 
 	def _apply(svg_element, matrix)
@@ -425,7 +394,7 @@ class TransformApplyer_path < TransformApplyerBase
 				"by matrix #{matrix.to_s}\n"+"original error: " + e.message
 		end
 
-		@codec.encode_path_data(instructions)
+		svg_element.add_attribute 'd', @codec.encode_path_data(instructions)
 
 	end
 end
@@ -480,7 +449,13 @@ class SVGTransformRemover < HasLogger
 			trans_parse_result = parent_trans_parse_result +
 				@parser.parse(trans_attr.value)
 		end
-	
+
+		if TransformSetting.non_svg_element_names.include?(svg_elem.name)
+			@logger.info 'skip transforming ' + svg_elem.name + 
+				' and its children.'
+			return
+		end
+			
 		_do_transform svg_elem, trans_parse_result
 	
 		svg_elem.elements.each do |child|
@@ -491,6 +466,7 @@ class SVGTransformRemover < HasLogger
 
 	# private
 	def _do_transform(elem, trans_parse_result)
+	
 		begin
 			skipped = @transformer.apply_transforms(elem, trans_parse_result)
 			@transformer.set_transform_attribute elem, skipped

@@ -9,7 +9,7 @@ if file_path.nil? || dest_file_path.nil?
 	p 'parameters are needed: svg_file_path dest_file_path'
 end
 
-remover = SVGTransformRemover.new
+remover = SVGTransformRemover.new(STDERR)
 remover.log_level = Logger::INFO
 
 svg_document = REXML::Document.new(File.open(file_path))
@@ -21,5 +21,5 @@ rescue => e
 	p e
 	exit
 end
-remover.write
+svg_document.write indent: 2
 #remover.write File.open(dest_file_path)

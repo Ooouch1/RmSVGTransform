@@ -239,87 +239,37 @@ end
 class PathTransformTest < Test::Unit::TestCase
 	include TransformApplyerTestUtil
 	
-	def assert_instruction(
-		expected_inst, expected_point_value_arrays, actual)
-		
-		assert_equal expected_inst, actual[:instruction]
-		assert_array_equal expected_point_value_arrays.map { |p|
-			Vector.elements p}, actual[:points]
-	end
-	def assert_instructions(expectations, instructions)
-		assert_equal expectations.length, instructions.length
-		expectations.each_with_index do |ex, i|
-			assert_instruction ex[0], ex[1], instructions[i]
-		end
-	end
-
-	def setup
-		@codec = PathDataCodec.new
-	end
-
-	sub_test_case 'decode path M(0,1)(3,4)(5,6)' do
-		setup do
-			@answer = [['M', [[0,1], [3,4], [5,6]]]]
-		end
-
-		def test_decode
-			instructions = @codec.decode_path_data("M 0,1 3,4 5,6")
-			assert_instructions @answer, instructions
-		end
-	end
-
-	
-	sub_test_case 'decode path M(1,2) L(3,4)(5,6) z' do
-		setup do
-			@answer = [['M', [[1,2]]], ['L', [[3,4], [5,6]]], ['z', []]]
-		end
-
-		def test_comma_separation_and_space_for_value_style
-			instructions = @codec.decode_path_data("M 1 2, L 3 4 5 6, z")
-			assert_instructions @answer, instructions
-		end
-
-		def test_space_separation_and_comma_for_value_style
-			instructions = @codec.decode_path_data("M1,2 L 3,4,5,6z")
-			assert_instructions @answer, instructions
-		end
-	end
-
-	sub_test_case 'encode path M(1,2) L(3,4)(5,6) z' do
-		def test_encode
-			instructions = [
-				{instruction: 'M', points: [vec(1,2)]},
-				{instruction: 'L', points: [vec(3,4), vec(5,6)]},
-				{instruction: 'z', points: []}
-			]
-			text = @codec.encode_path_data(instructions)
-			assert_equal 'M 1,2 L 3,4 5,6 z', text
-		end
-	end
-
-=begin
 	sub_test_case 'applyer for path' do
 		def test_apply_enlarge
 			applyer = TransformApplyer_path.new
 			stub_helper_matrix_of_enlarge_twice applyer.helper
+			stub_matrix = applyer.helper.matrix_of nil
 
 			element = REXML::Element.new 'path'
 			element.add_attribute 'd', 'm 1,2 3,4 l 5,6'
 
-
-			stub(applyer.codec).encode_path_data { |instructions|
-				# inject assertion of the method parameter
-				assert_instructions [
-					# point cooridate values should be twiced
-					['m', [vec(2.0, 4.0), vec(6.0,8.0)]],
-					['l', [vec(10.0, 12.0)]]
-				], instructions
+			instructions = Array.new(2) {|i|
+				PathInstruction::InstructionBase.new('dummy')
 			}
-			
+
+			stub(applyer.codec).decode_path_data {
+				instructions
+			}
+
+			mock(instructions[0]).apply!(stub_matrix) {}
+			mock(instructions[1]).apply!(stub_matrix) {}
+
+
+			stub(applyer.codec).encode_path_data {
+				'dummy1 dummy2'
+			}
+
 			applyer.apply element, 'dummy (^_-)'
+
+			assert_equal 'dummy1 dummy2', element.attribute('d').value()
+
 		end
 	end
-=end
 end
 
 class ShapeTransformTest < Test::Unit::TestCase

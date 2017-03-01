@@ -7,10 +7,16 @@ class Matrix
 		Matrix.columns affine_cols
 	end
 
-	def affine(vector)
+	def affine(vector, relative_coord = false)
 		if vector.count != column_count - 1
 			raise ArgumentError, 'size mismatch'
 		end
+
+		if relative_coord
+			return Vector.elements affine_lengths(vector)
+		end
+
+
 		computed = self * Vector.elements(vector.to_a() + [1], false)
 		Vector.elements [computed[0], computed[1]]
 	end
@@ -29,7 +35,7 @@ class Matrix
 			raise ArgumentError, "The size of parameter 'lengths' " +
 				"should be column_count-1"
 		end
-		lengths.to_a().each_with_index.map { |l, i|
+		lengths.each_with_index.map { |l, i|
 			affine_length(l, i)
 		}
 	end
