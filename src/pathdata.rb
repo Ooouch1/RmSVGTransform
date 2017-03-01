@@ -64,12 +64,19 @@ module PathInstruction
 			end
 		end
 
-		def apply_to_length(matrix, length_token)
-			length_token.value = matrix.affine_length(length_token.value)
+		def apply_to_diff(matrix, diff_token)
+			diff_token.value = matrix.affine_diff(diff_token.value)
 		end
-		
+=begin	
+		def apply_to_diffs(matrix, diffs_token)
+			diffs_token.value = matrix.affine_diffs(diffs_token.value)
+		end
+=end
 		def apply_to_lengths(matrix, lengths_token)
-			lengths_token.value = matrix.affine_lengths(lengths_token.value)
+			lengths_token.value = matrix.affine_diffs(lengths_token.value)
+			.map { |l|
+				l.abs	
+			}
 		end
 	end
 
@@ -147,7 +154,7 @@ module PathInstruction
 		end
 
 		def apply!(matrix)
-			apply_to_length matrix, @coord 
+			apply_to_diff matrix, @coord 
 			#TODO fix to use apply_to_coord. it needs to receive current pen position...
 		end
 

@@ -5,7 +5,7 @@ require 'logger'
 file_path = ARGV[0]
 dest_file_path = ARGV[1]
 
-if file_path.nil? || dest_file_path.nil?
+if file_path.nil? #|| dest_file_path.nil?
 	p 'parameters are needed: svg_file_path dest_file_path'
 end
 

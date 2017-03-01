@@ -13,7 +13,7 @@ class Matrix
 		end
 
 		if relative_coord
-			return Vector.elements affine_lengths(vector)
+			return Vector.elements affine_diffs(vector)
 		end
 
 
@@ -21,22 +21,22 @@ class Matrix
 		Vector.elements [computed[0], computed[1]]
 	end
 
-	def affine_length(length, dim)
+	def affine_diff(diff, dim)
 		create_basis = -> () {}
-		v = Vector.basis(size: column_count-1, index:dim) * length
+		v = Vector.basis(size: column_count-1, index:dim) * diff
 		z = Vector.elements [0]*(column_count-1)
 
 		# affine is not linear mapping due to translation
-		(affine(v) - affine(z)).norm
+		(affine(v) - affine(z))[dim]
 	end
 
-	def affine_lengths(lengths)
-		if lengths.size != column_count-1
+	def affine_diffs(diffs)
+		if diffs.size != column_count-1
 			raise ArgumentError, "The size of parameter 'lengths' " +
 				"should be column_count-1"
 		end
-		lengths.each_with_index.map { |l, i|
-			affine_length(l, i)
+		diffs.each_with_index.map { |d, i|
+			affine_diff(d, i)
 		}
 	end
 

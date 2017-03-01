@@ -129,8 +129,8 @@ class InstructionTransformTest < Test::Unit::TestCase
 	sub_test_case 'd attribute starts with moveto instruction' do
 
 		def test_relative_coord
-			verify_transform ['m', vec(6, 11), vec(12, 21)],
-				PathData::InstructionM.new('m', [1,2, 6,7], 0)
+			verify_transform ['m', vec(6, 11), vec(-12, 21)],
+				PathData::InstructionM.new('m', [1,2, -6,7], 0)
 		end
 
 		def test_absolute_coord

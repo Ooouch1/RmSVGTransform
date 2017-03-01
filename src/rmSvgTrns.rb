@@ -235,30 +235,68 @@ class TransformHelper
 		v
 	end
 
-	def _compute_length(elem, attr_name, dim, matrix)
-		length = float_attr(elem, attr_name)
-		return nil if length.nil?
-		matrix.affine_length(length, dim)
+	def _compute_diff(elem, attr_name, dim, matrix)
+		diff = float_attr(elem, attr_name)
+		return nil if diff.nil?
+		matrix.affine_diff(diff, dim)
 
+	end
+
+	def _compute_length(elem, attr_name, dim, matrix)
+		diff = _compute_diff(elem, attr_name, dim, matrix)
+		return nil if diff.nil?
+		diff.abs
 	end
 
 	def compute_x_length(elem, attr_name, matrix)
-		_compute_length(elem, attr_name, 0, matrix)
+		length = _compute_length(elem, attr_name, 0, matrix)
 	end
 	def compute_y_length(elem, attr_name, matrix)
-		_compute_length(elem, attr_name, 1, matrix)
+		length = _compute_length(elem, attr_name, 1, matrix)
+	end
+
+	def compute_x_diff(elem, attr_name, matrix)
+		_compute_diff(elem, attr_name, 0, matrix)
+	end
+	def compute_y_diff(elem, attr_name, matrix)
+		_compute_diff(elem, attr_name, 1, matrix)
+	end
+
+	def transform_x_diff(elem, attr_name, matrix, proxy_value = nil)
+		diff = compute_x_diff(elem, attr_name, matrix)
+		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
+		diff
+	end
+	def transform_y_diff(elem, attr_name, matrix, proxy_value = nil)
+		diff = compute_y_diff(elem, attr_name, matrix)
+		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
+		diff
 	end
 
 	def transform_x_length(elem, attr_name, matrix, proxy_value = nil)
-		length = compute_x_length(elem, attr_name, matrix)
+		length = compute_x_diff(elem, attr_name, matrix)
+		length = length.abs if ! length.nil?
 		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
 		length
 	end
 	def transform_y_length(elem, attr_name, matrix, proxy_value = nil)
-		length = compute_y_length(elem, attr_name, matrix)
+		length = compute_y_diff(elem, attr_name, matrix).abs
+		length = length.abs if ! length.nil?
 		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
 		length
 	end
+
+	def transform_diff_xy(
+		elem, x_attr_name, y_attr_name, matrix , x_proxy = 0, y_proxy = 0)
+		diffs = matrix.affine_diffs( [
+			float_attr(elem, x_attr_name, x_proxy),
+			float_attr(elem, y_attr_name, y_proxy)
+		])
+		elem.add_attribute x_attr_name, diffs[0]
+		elem.add_attribute y_attr_name, diffs[1]
+		diffs
+	end
+
 
 end
 
@@ -301,6 +339,7 @@ class TransformApplyerBase
 			'This method should transform svg_element attributes'
 	end
 
+
 end
 
 class ShapeTransformApplyerBase < TransformApplyerBase
@@ -311,25 +350,24 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 	end
 
 	def _transform_x_y(svg_element, matrix)
-		@helper.transform_point svg_element,
-			'x', 'y', matrix
+		return @helper.transform_point(
+			svg_element, 'x', 'y', matrix)
 	end
 
 	def _transform_cx_cy(svg_element, matrix)
-		@helper.transform_point svg_element,
-			'cx', 'cy', matrix
+		return @helper.transform_point(
+			svg_element, 'cx', 'cy', matrix)
 	end
 
 	def _transform_dx_dy(svg_element, matrix)
-		@helper.transform_point svg_element,
-			'dx', 'dy', matrix
+		return @helper.transform_diff_xy(svg_element, 'dx', 'dy', matrix)
 	end
 
 	def _transform_rx_ry(svg_element, matrix)
-		rx = @helper.compute_x_length svg_element,
-			'rx', matrix
-		ry = @helper.compute_y_length svg_element,
-			'ry', matrix
+		rx = @helper.compute_x_length(svg_element,
+			'rx', matrix)
+		ry = @helper.compute_y_length(svg_element,
+			'ry', matrix)
 		if rx.nil? 
 			if ry.nil?
 				rx = 0
@@ -342,18 +380,48 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 		end
 		svg_element.add_attribute 'rx', rx
 		svg_element.add_attribute 'ry', ry
+		return [rx, ry]
 	end
 
 	def _transform_r(svg_element, matrix)
-		@helper.transform_x_length svg_element,
-			'r', matrix
+		return @helper.transform_x_length(svg_element, 'r', matrix)
 	end
 
 	def _transform_width_height(svg_element, matrix)
-		@helper.transform_x_length svg_element,
-			'width', matrix
-		@helper.transform_y_length svg_element,
-			'height', matrix
+		width = @helper.compute_x_diff(svg_element, 'width', matrix)
+		height = @helper.compute_y_diff(svg_element, 'height', matrix)
+
+		if width.nil? || height.nil?
+			return nil
+		elsif width > 0 && height > 0
+			@helper.transform_x_diff svg_element,
+				'width', matrix
+			@helper.transform_y_diff svg_element,
+				'height', matrix
+		end
+		return [width, height]
+	end
+
+	def _transform_rect_area(
+		svg_element, matrix, x_name:'x', y_name:'y', w_name:'width', h_name:'height')
+
+		xy = @helper.transform_point(
+			svg_element, x_name, y_name, matrix)
+		
+		wh = _transform_width_height(svg_element, matrix)
+		if wh.nil? then return [xy, nil] end
+		
+		w = wh[0]
+		h = wh[1]
+		if w < 0
+			svg_element.add_attribute 'x', xy[0] + w
+			svg_element.add_attribute w_name, -w
+		end
+		if h < 0
+			svg_element.add_attribute 'y', xy[1] + h
+			svg_element.add_attribute h_name, -h
+		end
+		[xy, wh]
 	end
 
 end
@@ -401,18 +469,14 @@ end
 
 class TransformApplyer_rect < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
-		_transform_x_y svg_element, matrix
-		
-		_transform_width_height svg_element, matrix
-		
+		_transform_rect_area(svg_element, matrix)
 		_transform_rx_ry svg_element, matrix
 	end
 end
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
 		if svg_element.attribute('maskUnits').nil?
-			_transform_x_y svg_element, matrix
-			_transform_width_height svg_element, matrix
+			_transform_rect_area(svg_element, matrix)
 		end
 	end
 end
