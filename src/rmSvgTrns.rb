@@ -33,6 +33,20 @@ class HasLogger
 	end
 end
 
+module FloatUtil
+	class << self
+		@@EPS = 1e-6
+
+		def abs_eq(a, b, eps = @@EPS)
+			(a-b).abs < eps
+		end
+
+		def relatively_eq(a, b, eps = @@EPS)
+			abs_eq(a, b, eps)/Math.max(a.abs, b.abs)
+		end
+	end
+end
+
 class TransformValueParser < HasLogger
 
 	def parse(transform_value_text)
@@ -141,6 +155,8 @@ class Transformer < HasLogger
 			@logger.warn e if ! TransformSetting.transform_ignorable_element_names.include?(elem_name)
 			return []
 		end
+
+		#TODO filter non-applicable 'matrix' transform from given items
 		skipped = parse_result.reject { |key_values|
 			applyer.can_apply(key_values[:key])
 		}
@@ -226,7 +242,7 @@ class TransformHelper
 
 	def transform_point(
 		elem, x_attr_name, y_attr_name, matrix, x_proxy = 0, y_proxy = 0)
-		v = matrix.affine(Vector.elements [
+		v = matrix.affine(Vector[
 			float_attr(elem, x_attr_name, x_proxy),
 			float_attr(elem, y_attr_name, y_proxy)
 		])
@@ -288,7 +304,7 @@ class TransformHelper
 
 	def transform_diff_xy(
 		elem, x_attr_name, y_attr_name, matrix , x_proxy = 0, y_proxy = 0)
-		diffs = matrix.affine_diffs( [
+		diffs = matrix.affine_point_diff( Vector[
 			float_attr(elem, x_attr_name, x_proxy),
 			float_attr(elem, y_attr_name, y_proxy)
 		])
@@ -328,7 +344,19 @@ class TransformApplyerBase
 
 	def can_apply(transform_name)
 		@_can_apply[transform_name]
+
 	end
+
+=begin
+	def can_apply_matrix(matrix)
+		if @_can_apply['skewY'] && @_can_apply['skewX'] &&
+			@_can_apply['rotate']
+			return true
+		else
+			FloatUtil.abs_eq(matrix[1,0], 0) && FloatUtil.abs_eq(matrix[0,1], 0)
+		end
+	end
+=end
 
 	def apply(svg_element, parse_result)
 		_apply svg_element, @helper.matrix_of(parse_result)

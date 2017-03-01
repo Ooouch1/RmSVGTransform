@@ -45,7 +45,7 @@ class PathCodecTest < Test::Unit::TestCase
 	sub_test_case 'decode path a(0,1,2,3,4,5,6)h(7)v(8)' do
 		def test_decode
 			answer = [
-				['a', [0,1], 2, 3, 4, vec(5, 6)],
+				['a', vec(0,1), 2, 3, 4, vec(5, 6)],
 				['h', 7],
 				['v', 0.8]
 			]
@@ -99,34 +99,42 @@ end
 class InstructionTransformTest < Test::Unit::TestCase
 	include InstructionAsserts	
 	
-	def setup
-		@matrix = Matrix.affine_columns [
-			[2, 0],
-			[0, 3],
-			[4, 5],
-		]
-
-	end
-
 	def verify_transform(answer, inst)
 		inst.apply! @matrix
 		assert_instruction_as_array answer, inst 
 	end
 
 	sub_test_case 'arc instruction' do
+		setup do
+			@matrix = Matrix.affine_columns [
+				[2, 0],
+				[0, 3],
+				[4, 5],
+			]
+
+		end
+
 
 		def test_relative_coord
-			verify_transform ['a', [2,6], 3, 4, 5, vec(12, 21)],
+			verify_transform ['a', vec(2,6), 3, 4, 5, vec(12, 21)],
 				PathData::InstructionA.new('a', [1,2, 3,4,5, 6,7], 1)
 		end
 
 		def test_absolute_coord
-			verify_transform ['A', [2,6], 3, 4, 5, vec(16, 26)],
+			verify_transform ['A', vec(2,6), 3, 4, 5, vec(16, 26)],
 				PathData::InstructionA.new('A', [1,2, 3,4,5, 6,7], 1)
 		end
 	end
 
-	sub_test_case 'd attribute starts with moveto instruction' do
+	sub_test_case 'the 1st value of the first moveto should be absolute coordinate' do
+		setup do
+			@matrix = Matrix.affine_columns [
+				[2, 0],
+				[0, 3],
+				[4, 5],
+			]
+
+		end
 
 		def test_relative_coord
 			verify_transform ['m', vec(6, 11), vec(-12, 21)],
@@ -139,6 +147,22 @@ class InstructionTransformTest < Test::Unit::TestCase
 		end
 	end
 
+
+	sub_test_case 'rotate -PI/2' do 
+		setup do
+			@matrix = Matrix.affine_columns [
+				[0, 1],
+				[-1, 0],
+				[3, 4],
+			]
+		end
+		
+		def test_relative_coord
+			verify_transform ['m', vec(-2+3, 1+4), vec(-7, -6)],
+				PathData::InstructionM.new('m', [1,2, -6,7], 0)
+		end
+
+	end
 	
 
 end

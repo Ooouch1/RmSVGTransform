@@ -73,7 +73,7 @@ module PathInstruction
 		end
 =end
 		def apply_to_lengths(matrix, lengths_token)
-			lengths_token.value = matrix.affine_diffs(lengths_token.value)
+			lengths_token.value = matrix.affine_point_diff(lengths_token.value)
 			.map { |l|
 				l.abs	
 			}
@@ -92,7 +92,7 @@ module PathInstruction
 
 			slice_by_length(values, 7).each do |v_set|
 				@value_sets.push({
-					length_pair: Sequence.new([v_set[0], v_set[1]]),
+					length_pair: Sequence.new(Vector[v_set[0], v_set[1]]),
 					point:  Sequence.new(Vector[v_set[5], v_set[6]]),
 					other_values: v_set[2..4].map {|v| SingleValue.new(v)}
 				})

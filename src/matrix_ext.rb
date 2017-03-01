@@ -13,7 +13,7 @@ class Matrix
 		end
 
 		if relative_coord
-			return Vector.elements affine_diffs(vector)
+			return Vector.elements affine_point_diff(vector)
 		end
 
 
@@ -30,14 +30,15 @@ class Matrix
 		(affine(v) - affine(z))[dim]
 	end
 
-	def affine_diffs(diffs)
-		if diffs.size != column_count-1
+	def affine_point_diff(diff)
+		if diff.size != column_count-1
 			raise ArgumentError, "The size of parameter 'lengths' " +
 				"should be column_count-1"
 		end
-		diffs.each_with_index.map { |d, i|
-			affine_diff(d, i)
-		}
+
+		v = Vector.elements diff.to_a
+
+		(affine(v) - affine(Vector.elements [0] * diff.size))
 	end
 
 end
