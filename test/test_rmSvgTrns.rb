@@ -234,6 +234,19 @@ module TransformApplyerTestUtil
 			[2, 0],[0, 2],[0, 0]
 		]}
 	end
+
+	def stub_style_codec(codec)
+		stub(codec).decode {[]}
+		stub(codec).encode {'stub style text'}
+		stub(codec).apply! {}
+	end
+
+	def create_svg_element(name, style = 'dummy')
+		element = REXML::Element.new name
+		element.add_attribute 'style', style
+
+		element
+	end
 end
 
 class PathTransformTest < Test::Unit::TestCase
@@ -245,7 +258,9 @@ class PathTransformTest < Test::Unit::TestCase
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			stub_matrix = applyer.helper.matrix_of nil
 
-			element = REXML::Element.new 'path'
+			stub_style_codec(applyer.style_codec)
+
+			element = create_svg_element('path')
 			element.add_attribute 'd', 'm 1,2 3,4 l 5,6'
 
 			instructions = Array.new(2) {|i|
@@ -281,7 +296,9 @@ class ShapeTransformTest < Test::Unit::TestCase
 			applyer = TransformApplyer_circle.new
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
-			element = REXML::Element.new 'circle'
+			stub_style_codec(applyer.style_codec)
+			
+			element = create_svg_element('circle')
 			element.add_attribute 'cx', 3
 			element.add_attribute 'cy', 5
 			element.add_attribute 'r' , 1
@@ -300,7 +317,9 @@ class ShapeTransformTest < Test::Unit::TestCase
 			applyer = TransformApplyer_rect.new
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
-			element = REXML::Element.new 'rect'
+			stub_style_codec(applyer.style_codec)
+			element = create_svg_element('rect')
+
 			element.add_attribute 'x', 3
 			element.add_attribute 'y', 5
 			element.add_attribute 'rx' , 1
@@ -322,7 +341,8 @@ class ShapeTransformTest < Test::Unit::TestCase
 			applyer = TransformApplyer_rect.new
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
-			element = REXML::Element.new 'rect'
+			stub_style_codec(applyer.style_codec)
+			element = create_svg_element('rect')
 			
 			element.add_attribute 'rx' , 1
 			applyer.apply element, 'dummy (1,1)'
@@ -341,7 +361,8 @@ class ShapeTransformTest < Test::Unit::TestCase
 			applyer = TransformApplyer_rect.new
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
-			element = REXML::Element.new 'rect'
+			stub_style_codec(applyer.style_codec)
+			element = create_svg_element('rect')
 			
 			applyer.apply element, 'dummy (1,1)'
 			assert_float_attr element,  0, 'rx'

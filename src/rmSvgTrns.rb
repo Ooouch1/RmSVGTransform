@@ -2,6 +2,7 @@ require 'matrix'
 require_relative 'matrix_ext'
 require_relative 'object_ext'
 require_relative 'pathdata'
+require_relative 'style'
 
 require 'rexml/document'
 require 'logger'
@@ -242,10 +243,14 @@ class TransformHelper
 
 	def transform_point(
 		elem, x_attr_name, y_attr_name, matrix, x_proxy = 0, y_proxy = 0)
-		v = matrix.affine(Vector[
-			float_attr(elem, x_attr_name, x_proxy),
-			float_attr(elem, y_attr_name, y_proxy)
-		])
+		x = float_attr(elem, x_attr_name, x_proxy)
+		y = float_attr(elem, y_attr_name, y_proxy)
+
+		if x.nil? || y.nil?
+			return nil
+		end
+
+		v = matrix.affine(Vector[x, y])
 		elem.add_attribute x_attr_name, v[0]
 		elem.add_attribute y_attr_name, v[1]
 		v
@@ -320,6 +325,8 @@ class TransformApplyerBase
 	attr_accessor :helper
 	attr_reader :_can_apply
 	private :_can_apply
+
+	attr_accessor :style_codec
 	
 	def initialize()
 		@_can_apply = {
@@ -331,6 +338,7 @@ class TransformApplyerBase
 			'skewY'    => true
 		}
 		@helper = TransformHelper.new()
+		@style_codec = Style::Codec.new()
 	end
 
 	def disable_skew
@@ -359,7 +367,20 @@ class TransformApplyerBase
 =end
 
 	def apply(svg_element, parse_result)
-		_apply svg_element, @helper.matrix_of(parse_result)
+		matrix = @helper.matrix_of(parse_result)
+		_apply svg_element, matrix
+		_apply_matrix_to_style svg_element, matrix
+	end
+
+	def _apply_matrix_to_style(svg_element, matrix)
+		style = svg_element.attribute('style')
+		return if style.nil?
+
+		style_attributes = @style_codec.decode(style.value)
+		style_attributes.each { |a|
+			a.apply! matrix
+		}
+		svg_element.add_attribute 'style', @style_codec.encode(style_attributes)
 	end
 
 	def _apply(svg_element, matrix)
@@ -431,21 +452,21 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 	end
 
 	def _transform_rect_area(
-		svg_element, matrix, x_name:'x', y_name:'y', w_name:'width', h_name:'height')
+		svg_element, matrix, x_name:'x', y_name:'y', w_name:'width', h_name:'height', x_proxy:0, y_proxy:0)
 
 		xy = @helper.transform_point(
-			svg_element, x_name, y_name, matrix)
+			svg_element, x_name, y_name, matrix, x_proxy, y_proxy)
 		
 		wh = _transform_width_height(svg_element, matrix)
 		if wh.nil? then return [xy, nil] end
 		
 		w = wh[0]
 		h = wh[1]
-		if w < 0
+		if w < 0 && !xy[0].nil?
 			svg_element.add_attribute 'x', xy[0] + w
 			svg_element.add_attribute w_name, -w
 		end
-		if h < 0
+		if h < 0 && !xy[1].nil?
 			svg_element.add_attribute 'y', xy[1] + h
 			svg_element.add_attribute h_name, -h
 		end
@@ -503,9 +524,11 @@ class TransformApplyer_rect < ShapeTransformApplyerBase
 end
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
-		if svg_element.attribute('maskUnits').nil?
-			_transform_rect_area(svg_element, matrix)
-		end
+
+		# FIXME: doesn't work. need to work on its specification.
+		#if svg_element.attribute('maskUnits').value == 'userSpaceOnUse' 
+		#	_transform_rect_area(svg_element, matrix, x_proxy:nil, y_proxy:nil)
+		#end
 	end
 end
 
