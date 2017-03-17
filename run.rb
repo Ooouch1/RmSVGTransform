@@ -17,8 +17,8 @@ svg_document = REXML::Document.new(File.open(file_path))
 begin
 	remover.apply svg_document.root
 rescue => e
-	p 'Exited by error.'
-	p e
+	puts 'Exited by error.'
+	puts e.backtrace.join "\n"
 	exit
 end
 svg_document.write indent: 2

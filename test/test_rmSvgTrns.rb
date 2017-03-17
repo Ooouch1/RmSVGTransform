@@ -372,3 +372,40 @@ class ShapeTransformTest < Test::Unit::TestCase
 	end
 end
 
+class DefinitionsTest < Test::Unit::TestCase
+
+	sub_test_case 'simple defs' do
+		setup do
+			defs = REXML::Document.new("
+			<defs>
+				<clipPath id='test_id_clipPath'> 
+					<circle cx='1' cy='2' r='3'/>
+				</clipPath>
+				<dummy></dummy>
+				<mask id='test_id_mask'>
+					<rect x='4' y='5' width='6' height='7'/> 
+				</mask>
+			</defs>").root
+
+			@definitions = Definitions.new
+			@definitions.load_id_linked_elements defs
+	
+		end
+
+		def test_load_get
+			link_id = 'test_id_clipPath'
+			assert_equal link_id, @definitions.get_linked_element(link_id)
+			.attribute('id').value
+		end
+
+		def test_each_linked_element
+			elem = REXML::Element.new('rect')
+			elem.add_attribute 'clip-path', 'url(#test_id_clipPath)'
+			@definitions.each_linked_element(elem) { |linked, link_id|
+				assert_equal 'test_id_clipPath', link_id
+				assert_equal 'clipPath', linked.name
+			}
+		end
+	end
+
+end

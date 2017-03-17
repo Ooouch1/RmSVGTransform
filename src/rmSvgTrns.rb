@@ -8,15 +8,34 @@ require 'rexml/document'
 require 'logger'
 
 class TransformSetting
-	@@IGNORABLES = ['svg', 'g', 'clipPath', 'defs', 'marker'].freeze
-	@@SKIPPABLES = ['metadata'].freeze
+	@@IGNORABLES = [
+		'svg', 'g', 'RDF', 'Work',
+		'title', 'marker', 'defs', 'clipPath'].freeze
+	@@NON_SVG = ['namedview', 'metadata'].freeze
+
+	@@ID_LINKED = ['clipPath', 'mask'].freeze
+	@@ID_LINK_ATTR = ['clip-path'].freeze
+
+	#@@SKIPPABLES = ['namedview'].freeze
 	class << self
 		def transform_ignorable_element_names
 			@@IGNORABLES
 		end
 		
 		def non_svg_element_names
-			@@SKIPPABLES
+			@@NON_SVG
+		end
+
+		def id_linked_names
+			@@ID_LINKED
+		end
+
+		def id_linked?(elem)
+			@@ID_LINKED.filter {|name| elem.name == name}.length > 0
+		end
+
+		def id_link_attribute_names
+			@@ID_LINK_ATTR
 		end
 	end
 
@@ -214,113 +233,6 @@ class TransformApplyerFactory
 	end
 end
 
-class TransformHelper
-
-	def initialize(matrix_factory = TransformMatrixFactory.new())
-		@_matrix_factory = matrix_factory
-	end
-
-	# This method generates and delegates a matrix of merged tranform for given
-	# parse result of tranform attribute.
-	#
-	# parse_result:: output of TransformValueParser.parse()
-	# return:: generated matrix
-	# 
-	def matrix_of(parse_result)
-		if parse_result.nil? || parse_result.empty?
-			return Matrix.I(3)
-		end
-		(parse_result.map { |key_values|
-			@_matrix_factory.create(key_values)
-		}).reduce(:*)
-	end
-
-	def float_attr(elem, name, value_if_not_exist = nil)
-		a = elem.attribute(name)
-		return value_if_not_exist if a.nil?
-		a.value().to_f()
-	end
-
-	def transform_point(
-		elem, x_attr_name, y_attr_name, matrix, x_proxy = 0, y_proxy = 0)
-		x = float_attr(elem, x_attr_name, x_proxy)
-		y = float_attr(elem, y_attr_name, y_proxy)
-
-		if x.nil? || y.nil?
-			return nil
-		end
-
-		v = matrix.affine(Vector[x, y])
-		elem.add_attribute x_attr_name, v[0]
-		elem.add_attribute y_attr_name, v[1]
-		v
-	end
-
-	def _compute_diff(elem, attr_name, dim, matrix)
-		diff = float_attr(elem, attr_name)
-		return nil if diff.nil?
-		matrix.affine_diff(diff, dim)
-
-	end
-
-	def _compute_length(elem, attr_name, dim, matrix)
-		diff = _compute_diff(elem, attr_name, dim, matrix)
-		return nil if diff.nil?
-		diff.abs
-	end
-
-	def compute_x_length(elem, attr_name, matrix)
-		length = _compute_length(elem, attr_name, 0, matrix)
-	end
-	def compute_y_length(elem, attr_name, matrix)
-		length = _compute_length(elem, attr_name, 1, matrix)
-	end
-
-	def compute_x_diff(elem, attr_name, matrix)
-		_compute_diff(elem, attr_name, 0, matrix)
-	end
-	def compute_y_diff(elem, attr_name, matrix)
-		_compute_diff(elem, attr_name, 1, matrix)
-	end
-
-	def transform_x_diff(elem, attr_name, matrix, proxy_value = nil)
-		diff = compute_x_diff(elem, attr_name, matrix)
-		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
-		diff
-	end
-	def transform_y_diff(elem, attr_name, matrix, proxy_value = nil)
-		diff = compute_y_diff(elem, attr_name, matrix)
-		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
-		diff
-	end
-
-	def transform_x_length(elem, attr_name, matrix, proxy_value = nil)
-		length = compute_x_diff(elem, attr_name, matrix)
-		length = length.abs if ! length.nil?
-		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
-		length
-	end
-	def transform_y_length(elem, attr_name, matrix, proxy_value = nil)
-		length = compute_y_diff(elem, attr_name, matrix).abs
-		length = length.abs if ! length.nil?
-		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
-		length
-	end
-
-	def transform_diff_xy(
-		elem, x_attr_name, y_attr_name, matrix , x_proxy = 0, y_proxy = 0)
-		diffs = matrix.affine_point_diff( Vector[
-			float_attr(elem, x_attr_name, x_proxy),
-			float_attr(elem, y_attr_name, y_proxy)
-		])
-		elem.add_attribute x_attr_name, diffs[0]
-		elem.add_attribute y_attr_name, diffs[1]
-		diffs
-	end
-
-
-end
-
 class TransformApplyerBase
 	attr_accessor :helper
 	attr_reader :_can_apply
@@ -367,9 +279,15 @@ class TransformApplyerBase
 =end
 
 	def apply(svg_element, parse_result)
-		matrix = @helper.matrix_of(parse_result)
+		if parse_result.is_a?(Matrix)
+			matrix = parse_result
+		else
+			matrix = @helper.matrix_of(parse_result)
+		end
 		_apply svg_element, matrix
 		_apply_matrix_to_style svg_element, matrix
+
+		matrix
 	end
 
 	def _apply_matrix_to_style(svg_element, matrix)
@@ -398,9 +316,9 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 		disable_rotate
 	end
 
-	def _transform_x_y(svg_element, matrix)
+	def _transform_x_y(svg_element, matrix, x_proxy = 0, y_proxy = 0)
 		return @helper.transform_point(
-			svg_element, 'x', 'y', matrix)
+			svg_element, 'x', 'y', matrix, x_proxy, y_proxy)
 	end
 
 	def _transform_cx_cy(svg_element, matrix)
@@ -408,8 +326,9 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 			svg_element, 'cx', 'cy', matrix)
 	end
 
-	def _transform_dx_dy(svg_element, matrix)
-		return @helper.transform_diff_xy(svg_element, 'dx', 'dy', matrix)
+	def _transform_dx_dy(svg_element, matrix, x_proxy = 0, y_proxy = 0)
+		return @helper.transform_diff_xy(
+			svg_element, 'dx', 'dy', matrix, x_proxy, y_proxy)
 	end
 
 	def _transform_rx_ry(svg_element, matrix)
@@ -522,26 +441,194 @@ class TransformApplyer_rect < ShapeTransformApplyerBase
 		_transform_rx_ry svg_element, matrix
 	end
 end
+
+
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
 
 		# FIXME: doesn't work. need to work on its specification.
 		#if svg_element.attribute('maskUnits').value == 'userSpaceOnUse' 
 		#	_transform_rect_area(svg_element, matrix, x_proxy:nil, y_proxy:nil)
-		#end
+		#end	
 	end
 end
 
 
 class TransformApplyer_text < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
-		_transform_x_y svg_element, matrix
+		_transform_x_y svg_element, matrix, nil, nil
 
-		_transform_dx_dy svg_element, matrix
+		_transform_dx_dy svg_element, matrix, nil, nil
 	end
 end
 
 class TransformApplyer_tspan < TransformApplyer_text
+end
+
+class TransformHelper
+
+	def initialize(matrix_factory = TransformMatrixFactory.new())
+		@_matrix_factory = matrix_factory
+	end
+
+	# This method generates and delegates a matrix of merged tranform for given
+	# parse result of tranform attribute.
+	#
+	# parse_result:: output of TransformValueParser.parse()
+	# return:: generated matrix
+	# 
+	def matrix_of(parse_result)
+		if parse_result.nil? || parse_result.empty?
+			return Matrix.I(3)
+		end
+		(parse_result.map { |key_values|
+			@_matrix_factory.create(key_values)
+		}).reduce(:*)
+	end
+
+	def float_attr(elem, name, value_if_not_exist = nil)
+		a = elem.attribute(name)
+		return value_if_not_exist if a.nil?
+		a.value().to_f()
+	end
+
+	def transform_point(
+		elem, x_attr_name, y_attr_name, matrix, x_proxy = 0, y_proxy = 0)
+		x = float_attr(elem, x_attr_name, x_proxy)
+		y = float_attr(elem, y_attr_name, y_proxy)
+
+		return nil if x.nil? || y.nil?
+
+		v = matrix.affine(Vector[x, y])
+		elem.add_attribute x_attr_name, v[0]
+		elem.add_attribute y_attr_name, v[1]
+		v
+	end
+
+	def _compute_diff(elem, attr_name, dim, matrix)
+		diff = float_attr(elem, attr_name)
+		return nil if diff.nil?
+		matrix.affine_diff(diff, dim)
+
+	end
+
+	def _compute_length(elem, attr_name, dim, matrix)
+		diff = _compute_diff(elem, attr_name, dim, matrix)
+		return nil if diff.nil?
+		diff.abs
+	end
+
+	def compute_x_length(elem, attr_name, matrix)
+		length = _compute_length(elem, attr_name, 0, matrix)
+	end
+	def compute_y_length(elem, attr_name, matrix)
+		length = _compute_length(elem, attr_name, 1, matrix)
+	end
+
+	def compute_x_diff(elem, attr_name, matrix)
+		_compute_diff(elem, attr_name, 0, matrix)
+	end
+	def compute_y_diff(elem, attr_name, matrix)
+		_compute_diff(elem, attr_name, 1, matrix)
+	end
+
+	def transform_x_diff(elem, attr_name, matrix, proxy_value = nil)
+		diff = compute_x_diff(elem, attr_name, matrix)
+		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
+		diff
+	end
+	def transform_y_diff(elem, attr_name, matrix, proxy_value = nil)
+		diff = compute_y_diff(elem, attr_name, matrix)
+		elem.add_attribute attr_name, diff.proxy_if_nil(proxy_value)
+		diff
+	end
+
+	def transform_x_length(elem, attr_name, matrix, proxy_value = nil)
+		length = compute_x_diff(elem, attr_name, matrix)
+		length = length.abs if ! length.nil?
+		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
+		length
+	end
+	def transform_y_length(elem, attr_name, matrix, proxy_value = nil)
+		length = compute_y_diff(elem, attr_name, matrix).abs
+		length = length.abs if ! length.nil?
+		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
+		length
+	end
+
+	def transform_diff_xy(
+		elem, x_attr_name, y_attr_name, matrix , x_proxy = 0, y_proxy = 0)
+		x = float_attr(elem, x_attr_name, x_proxy)
+		y = float_attr(elem, y_attr_name, y_proxy)
+
+		return nil if x.nil? || y.nil? 
+
+		diffs = matrix.affine_point_diff(Vector[x, y])
+		elem.add_attribute x_attr_name, diffs[0]
+		elem.add_attribute y_attr_name, diffs[1]
+		diffs
+	end
+
+end
+
+
+
+class Definitions
+
+	def initialize()
+		@id_linked_elements = {}
+		@transformed = {}
+	end
+
+	def _store_as_id_linked_elements(elements)
+		elements.each { |elem|
+			id_attr = elem.attribute('id')
+			next if id_attr.nil?
+			@id_linked_elements[id_attr.value] = (block_given?)? yield(elem) : elem
+			@transformed[id_attr.value] = false
+		}
+	end
+
+	def load_id_linked_elements(svg_defs)
+		TransformSetting.id_linked_names.each {|name|
+			_store_as_id_linked_elements svg_defs.get_elements(name)
+		}
+	end
+
+	def each_linked_element(elem)
+		TransformSetting.id_link_attribute_names.each { |link_name|
+			link_id = get_link_id(elem, link_name)
+			linked = get_linked_element(link_id)
+			next if linked.nil?
+			
+			yield linked, link_id
+		}
+	end
+
+
+	def mark_as_transformed(link_id)
+		@transformed[link_id] = true
+	end
+
+	def transformed(link_id)
+		@transformed[link_id]
+	end
+
+	def get_link_id(elem, link_name)
+		return nil if link_name.nil? || elem.nil?
+		a = elem.attribute(link_name)
+		return nil if a.nil?
+		(a.value.match /url\(#(.+)\)/)[1]
+	end
+
+	def get_linked_element(link_id)
+		return nil if link_id.nil?
+		@id_linked_elements[link_id]
+	end
+
+	def to_s
+		"elements: #{@id_linked_elements.to_s}, transformed: #{@transformed.to_s}"
+	end
 end
 
 class SVGTransformRemover < HasLogger
@@ -553,10 +640,17 @@ class SVGTransformRemover < HasLogger
 	
 		@transformer.logger = @logger
 		@parser.logger = @logger
-	
+
 	end
 
-	def apply(svg_elem, parent_trans_parse_result = [])
+	def apply(svg_root)
+		@definitions = Definitions.new
+		@definitions.load_id_linked_elements(svg_root.elements['defs'])
+		@logger.info "defs loaded, " + @definitions.to_s
+		_apply svg_root
+	end
+
+	def _apply(svg_elem, parent_trans_parse_result = [])
 		trans_attr = svg_elem.attribute('transform')
 		if trans_attr.nil?
 			trans_parse_result = parent_trans_parse_result
@@ -564,6 +658,17 @@ class SVGTransformRemover < HasLogger
 			trans_parse_result = parent_trans_parse_result +
 				@parser.parse(trans_attr.value)
 		end
+
+		@definitions.each_linked_element(svg_elem) { |linked, link_id|
+			@logger.info "try transforming " + link_id
+			if @definitions.transformed(link_id) || linked.nil?
+				next
+			end
+			_apply linked, trans_parse_result
+			@definitions.mark_as_transformed link_id
+			@logger.info "transformed " + link_id
+		}
+
 
 		if TransformSetting.non_svg_element_names.include?(svg_elem.name)
 			@logger.info 'skip transforming ' + svg_elem.name + 
@@ -574,12 +679,12 @@ class SVGTransformRemover < HasLogger
 		_do_transform svg_elem, trans_parse_result
 	
 		svg_elem.elements.each do |child|
-			apply child, trans_parse_result
+			_apply child, trans_parse_result
 		end
 
 	end
 
-	# private
+	private
 	def _do_transform(elem, trans_parse_result)
 	
 		begin
@@ -590,5 +695,6 @@ class SVGTransformRemover < HasLogger
 			raise e
 		end
 	end
+
 end
 
