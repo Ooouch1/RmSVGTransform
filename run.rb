@@ -21,5 +21,5 @@ rescue => e
 	puts e.backtrace.join "\n"
 	exit
 end
-svg_document.write indent: 2
+svg_document.write indent: 2, transitive: true
 #remover.write File.open(dest_file_path)
