@@ -617,8 +617,10 @@ class Definitions
 	def get_link_id(elem, link_name)
 		return nil if link_name.nil? || elem.nil?
 		a = elem.attribute(link_name)
-		return nil if a.nil?
-		(a.value.match /url\(#(.+)\)/)[1]
+		return nil if a.nil? || a.value.nil?
+		m = (a.value.match /url\(#(.+)\)/)
+		return nil if m.nil?
+		m[1]
 	end
 
 	def get_linked_element(link_id)

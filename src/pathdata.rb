@@ -94,7 +94,7 @@ module PathInstruction
 				@value_sets.push({
 					length_pair: Sequence.new(Vector[v_set[0], v_set[1]]),
 					point:  Sequence.new(Vector[v_set[5], v_set[6]]),
-					other_values: v_set[2..4].map {|v| SingleValue.new(v)}
+					other_values: v_set[2..4].map {|v| SingleValue.new(v.to_i)}
 				})
 			end
 		end
