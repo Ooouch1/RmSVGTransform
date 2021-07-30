@@ -233,7 +233,7 @@ class TransformApplyerFactory
 	end
 end
 
-class TransformApplyerBase
+class TransformApplyerBase < HasLogger
 	attr_accessor :helper
 	attr_reader :_can_apply
 	private :_can_apply
@@ -241,6 +241,7 @@ class TransformApplyerBase
 	attr_accessor :style_codec
 	
 	def initialize()
+		super()
 		@_can_apply = {
 			'matrix'   => true,
 			'translate'=> true,
@@ -422,6 +423,7 @@ class TransformApplyer_path < TransformApplyerBase
 
 		begin
 			instructions.each do |inst|
+				logger.info "transform #{inst}"
 				inst.apply! matrix
 			end
 		rescue => e

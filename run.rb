@@ -3,10 +3,9 @@ require 'rexml/document'
 require 'logger'
 
 file_path = ARGV[0]
-dest_file_path = ARGV[1]
 
-if file_path.nil? #|| dest_file_path.nil?
-	p 'parameters are needed: svg_file_path dest_file_path'
+if file_path.nil?
+	p 'parameters are needed: svg_file_path'
 end
 
 remover = SVGTransformRemover.new(STDERR)
@@ -22,4 +21,3 @@ rescue => e
 	exit
 end
 svg_document.write indent: 2, transitive: true
-#remover.write File.open(dest_file_path)

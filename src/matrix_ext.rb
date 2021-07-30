@@ -9,7 +9,7 @@ class Matrix
 
 	def affine(vector, relative_coord = false)
 		if vector.count != column_count - 1
-			raise ArgumentError, 'size mismatch'
+			raise ArgumentError, "size mismatch, vector: #{vector}, column_count: #{column_count}"
 		end
 
 		if relative_coord
@@ -22,7 +22,6 @@ class Matrix
 	end
 
 	def affine_diff(diff, dim)
-		create_basis = -> () {}
 		v = Vector.basis(size: column_count-1, index:dim) * diff
 		z = Vector.elements [0]*(column_count-1)
 

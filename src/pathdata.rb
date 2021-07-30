@@ -1,4 +1,6 @@
 require_relative './matrix_ext'
+require 'logger'
+
 
 module PathInstruction
 	# tokens
@@ -32,10 +34,14 @@ module PathInstruction
 	end
 
 	class InstructionBase
+		attr_reader :logger
 		def initialize(instruction_char, instruction_order = -1)
 			@instruction = SingleValue.new(instruction_char)
 			@_relative_coord = (instruction_char == instruction_char.downcase)
 			@_first_instruction = (instruction_order == 0) 
+			
+			@logger = Logger.new(STDOUT)
+			logger.level = Logger::WARN
 		end
 
 		def encode
@@ -64,8 +70,8 @@ module PathInstruction
 			end
 		end
 
-		def apply_to_diff(matrix, diff_token)
-			diff_token.value = matrix.affine_diff(diff_token.value)
+		def apply_to_diff(matrix, diff_token, dim)
+			diff_token.value = matrix.affine_diff(diff_token.value, dim)
 		end
 =begin	
 		def apply_to_diffs(matrix, diffs_token)
@@ -154,12 +160,16 @@ module PathInstruction
 		end
 
 		def apply!(matrix)
-			apply_to_diff matrix, @coord 
-			#TODO fix to use apply_to_coord. it needs to receive current pen position...
+			logger.info "apply matrix to #{@instruction} #{@coord}"
+			#apply_to_diff matrix, @coord, @dim
+			seq_coord = Sequence.new((Vector.basis(size: matrix.column_count-1, index:@dim) * @coord.value))
+			apply_to_coord matrix, seq_coord
+			@coord.value = seq_coord.value[@dim]
+			@coord.value
 		end
 
 		def encode
-			@instruction + ' ' + @coord
+			@instruction.to_s + ' ' + @coord.to_s
 		end
 
 		def to_s

@@ -161,7 +161,21 @@ class InstructionTransformTest < Test::Unit::TestCase
 			verify_transform ['m', vec(-2+3, 1+4), vec(-7, -6)],
 				PathData::InstructionM.new('m', [1,2, -6,7], 0)
 		end
-
+	end
+	
+	sub_test_case 'horizontal move' do 
+		setup do
+			@matrix = Matrix.affine_columns [
+				[1, 0],
+				[0, 1],
+				[0, 0],
+			]
+		end
+		
+		def test_absolute_coord
+			verify_transform ['H', 3],
+				PathData::InstructionH.new('H', [3], 0)
+		end
 	end
 	
 
