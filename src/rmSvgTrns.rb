@@ -456,6 +456,17 @@ class TransformApplyer_rect < ShapeTransformApplyerBase
 	end
 end
 
+class TransformApplyer_polygon < TransformApplyerBase
+	def _apply(svg_element, matrix)
+		codec = PathData::Codec.new
+		instructions = codec.decode_path_data('M ' + svg_element.attribute('points').value)
+		instructions.each do |inst|
+			inst.apply! matrix
+		end
+		
+		svg_element.add_attribute 'points', codec.encode_path_data(instructions).sub(/M /, '')
+	end
+end
 
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
