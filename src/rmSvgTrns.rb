@@ -129,7 +129,7 @@ class TransformMatrixFactory
 	end
 
 	def _create_rotate(values)
-		rad = ((360.0 + values[0]) / 180.0) * Math::PI
+		rad = _to_radian values[0]
 		cos_v = Math.cos rad
 		sin_v = Math.sin rad
 		x = values[1].zero_if_nil
@@ -141,13 +141,16 @@ class TransformMatrixFactory
 	end
 	
 	def _create_skewX(values)
-		self._create_matrix [1, 0, Math.tan(values[0]), 1, 0, 0]
+		self._create_matrix [1, 0, Math.tan(_to_radian(values[0])), 1, 0, 0]
 	end
 
 	def _create_skewY(values)
-		self._create_matrix [1, Math.tan(values[0]), 0, 1, 0, 0]
+		self._create_matrix [1, Math.tan(_to_radian(values[0])), 0, 1, 0, 0]
 	end
 
+	def _to_radian(degree)
+		(degree / 180.0) * Math::PI	
+	end
 end
 
 class UnacceptableSVGTagError < StandardError
