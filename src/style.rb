@@ -27,6 +27,26 @@ module Style
 		end
 	end
 
+	class StrokeDashArray < AttributeBase
+		def initialize(key, value)
+			super(key, value.split(',').map{|v| v.strip.to_f})
+		end
+
+		def apply!(matrix)
+			# Remove Inkscape-specific treatment. Maybe correct.
+			@value = @value.map{ |v| v * Math.sqrt(matrix.determinant.abs)}
+		end
+
+		def encode
+			if @value.size == 1
+				return "#{@key}:none;"
+			end
+			
+			"#{@key}:#{@value.join ','};"
+		end
+
+	end
+
 	class StubAttribute < AttributeBase
 	end
 
@@ -44,6 +64,8 @@ module Style
 			case key
 			when 'stroke-width'
 				return StrokeWidth.new(key, value)
+			when 'stroke-dasharray'
+				return StrokeDashArray.new(key, value)
 			else
 				return StubAttribute.new(key, value)
 			end
