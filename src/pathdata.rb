@@ -35,9 +35,11 @@ module PathInstruction
 
 	class InstructionBase
 		attr_reader :logger
+		attr_reader :instruction, :relative_coord, :instruction_order
 		def initialize(instruction_char, instruction_order = -1)
 			@instruction = SingleValue.new(instruction_char)
-			@_relative_coord = (instruction_char == instruction_char.downcase)
+			@relative_coord = (instruction_char == instruction_char.downcase)
+			@instruction_order = instruction_order
 			@_first_instruction = (instruction_order == 0) 
 			
 			@logger = Logger.new(STDOUT)
@@ -46,6 +48,9 @@ module PathInstruction
 
 		def encode
 			(to_a.map {|token| token.encode}).join(' ')
+		end
+
+		def to_abs_instruction(pen_position_vec)
 		end
 
 		private
@@ -66,7 +71,7 @@ module PathInstruction
 					coord_token.value)
 			else
 				coord_token.value = matrix.affine(
-					coord_token.value, @_relative_coord)
+					coord_token.value, @relative_coord)
 			end
 		end
 
@@ -84,15 +89,15 @@ module PathInstruction
 				l.abs	
 			}
 		end
+
+		private
+		attr_writer :relative_coord, :instruction
 	end
 
 	class Arc < InstructionBase
-		
+		attr_reader :value_sets
 		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, instruction_order)
-
-			@instruction = SingleValue.new(instruction_char)
-			@relative_coord = (instruction_char == instruction_char.downcase)
 			
 			@value_sets = []
 
@@ -113,7 +118,7 @@ module PathInstruction
 		end
 
 		def to_s
-			{instruction:@instruction, value_sets: @value_sets}.to_s
+			{instruction:instruction, value_sets: @value_sets}.to_s
 		end
 
 		def to_a
@@ -125,10 +130,17 @@ module PathInstruction
 				]
 			}].flatten
 		end
+		
+		def last_point_vec
+			@value_sets.last[:point].value
+		end
+		
+		protected
+		attr_writer :value_sets
 	end
 
 	class MultiPoint < InstructionBase
-		
+		attr_reader :points
 		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, instruction_order)
 			@points = slice_to_2D_coords(values).map { |coord|
@@ -147,8 +159,16 @@ module PathInstruction
 		end
 
 		def to_a
-			[@instruction, @points].flatten
+			[instruction, @points].flatten
 		end
+		
+
+		def last_point_vec
+			@points.last.value
+		end
+
+		protected
+		attr_writer :points
 	end
 
 	class Unary < InstructionBase
@@ -156,28 +176,49 @@ module PathInstruction
 		def initialize(instruction_char, values, dim)
 			super(instruction_char)
 			@dim = dim
-			@coord = SingleValue.new(values.last)
+			@coords = values.map {|v| SingleValue.new(v)}
 		end
 
+		def to_seq_coords
+			@coords.map {|coord| Sequence.new((Vector.basis(size: 2, index:@dim) * coord.value))}
+		end
+		
+		def to_abs_seq_coords(pen_position_vec)
+			seq_coords = to_seq_coords
+			abs_coords = to_seq_coords
+			if relative_coord
+				abs_coords[0].value = seq_coords[0].value + pen_position_vec
+				for i in 1...@coords.size 
+					abs_coords[i].value = abs_coords[i-1] + seq_coords[i].value
+				end
+			else
+				opposite = @dim == 0 ? 1 : 0
+				abs_coords.each do |abs_coord|
+					abs_coord.value[opposite] = pen_position_vec[opposite]
+				end
+			end
+			
+			return abs_coords
+		end
+		
 		def apply!(matrix)
-			logger.info "apply matrix to #{@instruction} #{@coord}"
-			#apply_to_diff matrix, @coord, @dim
-			seq_coord = Sequence.new((Vector.basis(size: matrix.column_count-1, index:@dim) * @coord.value))
-			apply_to_coord matrix, seq_coord
-			@coord.value = seq_coord.value[@dim]
-			@coord.value
+			logger.info "apply matrix to #{@instruction} #{@coords}"
+			seq_coords = to_seq_coords
+			seq_coords.each {|seq_coord| apply_to_coord matrix, seq_coord}
+			@coords = seq_coords.map {|seq_coord| SingleValue.new(seq_coord.value[@dim])}
+			@coords
 		end
 
 		def encode
-			@instruction.to_s + ' ' + @coord.to_s
+			@instruction.to_s + ' ' + @coords.to_s
 		end
 
 		def to_s
-			{instruction:@instruction, coord: @coord}.to_s
+			{instruction:@instruction, coords: @coords}.to_s
 		end
 		
 		def to_a
-			[@instruction, @coord]
+			[instruction, @coords].flatten
 		end
 	end
 
@@ -191,12 +232,12 @@ module PathInstruction
 		end
 
 		def to_s
-			@instruction
+			instruction
 		end
 
 		def to_a
-			[@instruction]
-		end
+			[instruction]
+		end		
 	end
 end
 
@@ -204,32 +245,149 @@ end
 
 module PathData
 	class InstructionA < PathInstruction::Arc
+		include PathInstruction
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @value_sets
+			end
+			
+			abs_value_sets = Marshal.load(Marshal.dump(value_sets))
+			
+			abs_value_sets[0][:point] = Sequence.new(pen.value + @value_sets[0][:point].value)
+			for i in 1...@value_sets.size
+				abs_value_sets[i][:point] = Sequence.new(@value_sets[i][:point].value + abs_value_sets[i-1][:point].value)
+			end
+
+			return abs_value_sets
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionA.new @instruction.value.upcase, [0,0,0,0,0,0,0], instruction_order
+			a.value_sets = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
+	
 	class InstructionM < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+		
+			abs_coord = Array.new @points.size, Sequence.new(Vector.elements([0, 0]))
+			abs_coord[0] = @_first_instruction ? @points[0] : pen
+			for i in 1...@points.size
+				abs_coord[i] = Sequence.new(@points[i].value + abs_coord[i-1].value)
+			end
+		
+			return abs_coord
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionM.new @instruction.value.upcase, [0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
+	
 	class InstructionQ < PathInstruction::MultiPoint
 	end
 	class InstructionT < PathInstruction::MultiPoint
 	end
 	class InstructionC < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+
+			abs_coord = @points.map {|p| Sequence.new(p.value - pen.value)}
+			
+			return abs_coord
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionC.new @instruction.value.upcase, [0,0,0,0,0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
 	class InstructionS < PathInstruction::MultiPoint
 	end
 	class InstructionL < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+		
+			abs_coord = Array.new @points.size, Sequence.new(Vector.elements([0, 0]))
+			abs_coord[0] = Sequence.new(@points[0].value + pen)
+			for i in 1...@points.size
+				abs_coord[i] = Sequence.new(@points[i].value + abs_coord[i-1].value)
+			end
+		
+			return abs_coord
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionL.new @instruction.value.upcase, [0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
 
 	class InstructionH < PathInstruction::Unary
 		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, values, 0)
 		end
+		
+		def to_instructionL(pen_position_vec)
+			abs_coords = to_abs_seq_coords pen_position_vec
+			coord_array = (abs_coords.map {|coord| coord.value.to_a}).flatten
+			InstructionL.new('L', coord_array, instruction_order)
+		end
 	end
+
 	class InstructionV < PathInstruction::Unary
 		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, values, 1)
 		end
+		def to_instructionL(pen_position_vec)
+			abs_coords = to_abs_seq_coords pen_position_vec
+
+			InstructionL.new('L', (abs_coords.map {|coord| coord.value.to_a}).flatten, instruction_order)
+		end
 	end
 
 	class InstructionZ < PathInstruction::Parameterless
+		def to_abs_instruction(pen_position_vec)
+			@_pen_position_vec = pen_position_vec
+			self
+		end
+		def last_point_vec
+			@_pen_position_vec
+		end
+
+	
 	end
 
 

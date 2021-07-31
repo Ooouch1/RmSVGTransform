@@ -274,6 +274,12 @@ class PathTransformTest < Test::Unit::TestCase
 			mock(instructions[0]).apply!(stub_matrix) {}
 			mock(instructions[1]).apply!(stub_matrix) {}
 
+			mock(instructions[0]).to_abs_instruction(Vector.elements [0, 0]) {instructions[0]}
+			mock(instructions[1]).to_abs_instruction(Vector.elements [0, 0]) {instructions[1]}
+			
+			mock(instructions[0]).last_point_vec() {Vector.elements [0, 0]}
+			mock(instructions[1]).last_point_vec() {Vector.elements [0, 0]}
+
 
 			stub(applyer.codec).encode_path_data {
 				'dummy1 dummy2'

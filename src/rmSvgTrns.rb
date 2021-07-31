@@ -421,10 +421,18 @@ class TransformApplyer_path < TransformApplyerBase
 		instructions = @codec.decode_path_data(
 			svg_element.attribute('d').value)
 
+		pen_position_vec = Vector.elements [0,0]
+		abs_instructions = Array.new(0)
 		begin
 			instructions.each do |inst|
-				logger.info "transform #{inst}"
-				inst.apply! matrix
+				non_unary_inst = (inst.is_a?(PathInstruction::Unary) ? inst.to_instructionL(pen_position_vec) : inst);
+				abs_inst =  non_unary_inst.to_abs_instruction(pen_position_vec)
+				pen_position_vec = abs_inst.last_point_vec
+				abs_instructions.append abs_inst
+			end
+			abs_instructions.each do |abs_inst|
+				logger.info "transform #{abs_inst}"
+				abs_inst.apply! matrix
 			end
 		rescue => e
 			raise ArgumentError, 
@@ -432,8 +440,7 @@ class TransformApplyer_path < TransformApplyerBase
 				"by matrix #{matrix.to_s}\n"+"original error: " + e.message
 		end
 
-		svg_element.add_attribute 'd', @codec.encode_path_data(instructions)
-
+		svg_element.add_attribute 'd', @codec.encode_path_data(abs_instructions)
 	end
 end
 

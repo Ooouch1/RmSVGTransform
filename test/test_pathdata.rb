@@ -41,7 +41,7 @@ class PathCodecTest < Test::Unit::TestCase
 			assert_instructions_as_array answer, instructions
 		end
 	end
-
+	
 	sub_test_case 'decode path a(0,1,2,3,4,5,6)h(7)v(8)' do
 		def test_decode
 			answer = [
@@ -95,6 +95,18 @@ class PathCodecTest < Test::Unit::TestCase
 
 end
 
+class InstructionConversionTest < Test::Unit::TestCase
+	include InstructionAsserts
+	
+	sub_test_case 'to_abs_instruction m(0,1)(2,3)' do
+		def test_to_abs_instruction
+			answer = ['M', vec(0, 1), vec(2, 4)]
+			instruction = PathData::InstructionM.new('m', [0,1,2,3], 0)
+			assert_instruction_as_array answer, instruction.to_abs_instruction(vec(0,0))
+		end
+	end
+
+end
 
 class InstructionTransformTest < Test::Unit::TestCase
 	include InstructionAsserts	
@@ -166,15 +178,15 @@ class InstructionTransformTest < Test::Unit::TestCase
 	sub_test_case 'horizontal move' do 
 		setup do
 			@matrix = Matrix.affine_columns [
-				[1, 0],
+				[2, 0],
 				[0, 1],
 				[0, 0],
 			]
 		end
 		
 		def test_absolute_coord
-			verify_transform ['H', 3],
-				PathData::InstructionH.new('H', [3], 0)
+			verify_transform ['H', 6,14],
+				PathData::InstructionH.new('H', [3,7], 0)
 		end
 	end
 	
