@@ -129,8 +129,9 @@ class TransformMatrixFactory
 	end
 
 	def _create_rotate(values)
-		cos_v = Math.cos values[0]
-		sin_v = Math.sin values[0]
+		rad = ((360.0 + values[0]) / 180.0) * Math::PI
+		cos_v = Math.cos rad
+		sin_v = Math.sin rad
 		x = values[1].zero_if_nil
 		y = values[2].zero_if_nil
 
