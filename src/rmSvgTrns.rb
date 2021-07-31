@@ -205,6 +205,7 @@ class Transformer < HasLogger
 	def set_transform_attribute(svg_element, parse_result_items)
 		if parse_result_items.nil? || parse_result_items.empty?
 			svg_element.delete_attribute 'transform'
+			svg_element.delete_attribute 'inkscape:original-d'
 			return
 		end
 
@@ -429,7 +430,7 @@ class TransformApplyer_path < TransformApplyerBase
 		abs_instructions = Array.new(0)
 		begin
 			instructions.each do |inst|
-				non_unary_inst = (inst.is_a?(PathInstruction::Unary) ? inst.to_instructionL(pen_position_vec) : inst);
+				non_unary_inst = (inst.is_a?(PathInstruction::Unary) ? inst.to_instructionL(pen_position_vec) : inst)
 				abs_inst =  non_unary_inst.to_abs_instruction(pen_position_vec)
 				pen_position_vec = abs_inst.last_point_vec
 				abs_instructions.append abs_inst
@@ -494,9 +495,16 @@ class TransformHelper
 		if parse_result.nil? || parse_result.empty?
 			return Matrix.I(3)
 		end
-		(parse_result.map { |key_values|
+		
+#		p parse_result # debug
+		
+		matrix = (parse_result.map { |key_values|
 			@_matrix_factory.create(key_values)
 		}).reduce(:*)
+		
+#		p matrix # debug
+		
+		matrix
 	end
 
 	def float_attr(elem, name, value_if_not_exist = nil)
