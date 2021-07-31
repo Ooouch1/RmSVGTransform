@@ -306,6 +306,7 @@ module PathData
 		include PathInstruction
 		def initialize(instruction_char, values, instruction_order)
 			super(instruction_char, values, instruction_order)
+			@point_sets = slice_by_length @points, 3
 		end
 		
 		def to_abs_coord(pen_position_vec)
@@ -313,10 +314,16 @@ module PathData
 			if not relative_coord
 				return @points
 			end
-
-			abs_coord = @points.map {|p| Sequence.new(p.value - pen.value)}
 			
-			return abs_coord
+			abs_coords = Array.new()
+			@point_sets.each do |points|
+				abs_coord = points.map {|p| Sequence.new(p.value + pen.value)}
+
+				pen.value = abs_coord.last.value
+				abs_coords.append abs_coord
+			end
+			
+			return abs_coords.flatten
 		end
 		
 		def to_abs_instruction(pen_position_vec)
