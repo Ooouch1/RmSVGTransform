@@ -435,7 +435,7 @@ module PathData
 			end
 		
 			abs_coord = Array.new @points.size, Sequence.new(Vector.elements([0, 0]))
-			abs_coord[0] = Sequence.new(@points[0].value + pen)
+			abs_coord[0] = Sequence.new(@points[0].value + pen.value)
 			for i in 1...@points.size
 				abs_coord[i] = Sequence.new(@points[i].value + abs_coord[i-1].value)
 			end
@@ -468,8 +468,8 @@ module PathData
 		end
 		def to_instructionL(pen_position_vec)
 			abs_coords = to_abs_seq_coords pen_position_vec
-
-			InstructionL.new('L', (abs_coords.map {|coord| coord.value.to_a}).flatten, instruction_order)
+			coord_array = (abs_coords.map {|coord| coord.value.to_a}).flatten
+			InstructionL.new('L', coord_array, instruction_order)
 		end
 	end
 
