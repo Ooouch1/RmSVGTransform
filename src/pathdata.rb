@@ -299,9 +299,67 @@ module PathData
 	end
 	
 	class InstructionQ < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+			@point_sets = slice_by_length @points, 2
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+			
+			abs_coords = Array.new()
+			@point_sets.each do |points|
+				abs_coord = points.map {|p| Sequence.new(p.value + pen.value)}
+
+				pen.value = abs_coord.last.value
+				abs_coords.append abs_coord
+			end
+			
+			return abs_coords.flatten
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionQ.new @instruction.value.upcase, [0,0,0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
+
 	class InstructionT < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+			@point_sets = slice_by_length @points, 1
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+			
+			abs_coords = Array.new()
+			@point_sets.each do |points|
+				abs_coord = points.map {|p| Sequence.new(p.value + pen.value)}
+
+				pen.value = abs_coord.last.value
+				abs_coords.append abs_coord
+			end
+			
+			return abs_coords.flatten
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionS.new @instruction.value.upcase, [0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
+
 	class InstructionC < PathInstruction::MultiPoint
 		include PathInstruction
 		def initialize(instruction_char, values, instruction_order)
@@ -332,8 +390,38 @@ module PathData
 			a
 		end
 	end
+
 	class InstructionS < PathInstruction::MultiPoint
+		include PathInstruction
+		def initialize(instruction_char, values, instruction_order)
+			super(instruction_char, values, instruction_order)
+			@point_sets = slice_by_length @points, 2
+		end
+		
+		def to_abs_coord(pen_position_vec)
+			pen = Sequence.new(pen_position_vec)
+			if not relative_coord
+				return @points
+			end
+			
+			abs_coords = Array.new()
+			@point_sets.each do |points|
+				abs_coord = points.map {|p| Sequence.new(p.value + pen.value)}
+
+				pen.value = abs_coord.last.value
+				abs_coords.append abs_coord
+			end
+			
+			return abs_coords.flatten
+		end
+		
+		def to_abs_instruction(pen_position_vec)
+			a = InstructionS.new @instruction.value.upcase, [0,0,0,0], instruction_order
+			a.points = to_abs_coord(pen_position_vec)
+			a
+		end
 	end
+
 	class InstructionL < PathInstruction::MultiPoint
 		include PathInstruction
 		def initialize(instruction_char, values, instruction_order)
