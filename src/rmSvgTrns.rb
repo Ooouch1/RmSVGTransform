@@ -468,6 +468,14 @@ class TransformApplyer_polygon < TransformApplyerBase
 	end
 end
 
+class TransformApplyer_line < TransformApplyerBase
+	def _apply(svg_element, matrix)
+		@helper.transform_point svg_element, 'x1', 'y1', matrix
+		@helper.transform_point svg_element, 'x2', 'y2', matrix
+	end
+end
+
+
 class TransformApplyer_mask < ShapeTransformApplyerBase
 	def _apply(svg_element, matrix)
 
