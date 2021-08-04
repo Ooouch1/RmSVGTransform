@@ -40,7 +40,7 @@ class Matrix
 		(affine(v) - affine(Vector.elements [0] * diff.size))
 	end
 
-	def apply_to_lengths(diff)
+	def affine_lengths(diff)
 		if diff.size != column_count-1
 			raise ArgumentError, "The size of parameter 'lengths' " +
 				"should be column_count-1"

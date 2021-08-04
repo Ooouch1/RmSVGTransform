@@ -84,7 +84,7 @@ module PathInstruction
 		end
 =end
 		def apply_to_lengths(matrix, lengths_token)
-			lengths_token.value = matrix.apply_to_lengths(lengths_token.value)
+			lengths_token.value = matrix.affine_lengths(lengths_token.value)
 			.map { |l| l}
 		end
 
