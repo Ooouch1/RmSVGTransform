@@ -268,6 +268,10 @@ class TransformApplyerBase < HasLogger
 		@_can_apply['rotate'] = false
 	end
 
+	def enable_rotate
+		@_can_apply['rotate'] = true
+	end
+
 	def can_apply(transform_name)
 		@_can_apply[transform_name]
 
@@ -401,6 +405,10 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 end
 
 class TransformApplyer_circle < ShapeTransformApplyerBase
+	def initialize
+		super()
+		enable_rotate()
+	end
 	def _apply(svg_element, matrix)
 		_transform_cx_cy svg_element, matrix
 		_transform_r svg_element, matrix	

@@ -70,7 +70,7 @@ class MatrixFactoryTest < Test::Unit::TestCase
 
 		test 'rotate: center is origin' do
 			
-			matrix = @factory.create({key:'rotate', values:[-Math::PI/4]})
+			matrix = @factory.create({key:'rotate', values:[-45]})
 			# p = matrix * Vector[1, 0, 1]
 			p = matrix.affine Vector[1, 0]
 			
@@ -81,7 +81,7 @@ class MatrixFactoryTest < Test::Unit::TestCase
 		end
 		
 		test 'rotate: center is indicated' do
-			matrix = @factory.create({key:'rotate', values:[-Math::PI/4, 1, 1]})
+			matrix = @factory.create({key:'rotate', values:[-45, 1, 1]})
 			$test_logger.info('Factory:single_transform, rotate with center') {matrix}
 			p = matrix.affine Vector[1, 0]
 			

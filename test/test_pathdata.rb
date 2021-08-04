@@ -133,7 +133,7 @@ class InstructionTransformTest < Test::Unit::TestCase
 		end
 
 		def test_absolute_coord
-			verify_transform ['A', vec(2,6), 3, 4, 5, vec(16, 26)],
+			verify_transform ['A', vec(2.0,6.0), 3, 4, 5, vec(16, 26)],
 				PathData::InstructionA.new('A', [1,2, 3,4,5, 6,7], 1)
 		end
 	end
