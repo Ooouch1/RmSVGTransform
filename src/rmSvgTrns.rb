@@ -365,6 +365,10 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 		return @helper.transform_x_length(svg_element, 'r', matrix)
 	end
 
+	def _transform_circle_r(svg_element, matrix)
+		return @helper.transform_circle_r(svg_element, 'r', matrix)
+	end
+
 	def _transform_width_height(svg_element, matrix)
 		width = @helper.compute_x_diff(svg_element, 'width', matrix)
 		height = @helper.compute_y_diff(svg_element, 'height', matrix)
@@ -411,7 +415,7 @@ class TransformApplyer_circle < ShapeTransformApplyerBase
 	end
 	def _apply(svg_element, matrix)
 		_transform_cx_cy svg_element, matrix
-		_transform_r svg_element, matrix	
+		_transform_circle_r svg_element, matrix	
 	end
 end
 
@@ -614,6 +618,13 @@ class TransformHelper
 		length = length.abs if ! length.nil?
 		elem.add_attribute attr_name, length.proxy_if_nil(proxy_value)
 		length
+	end
+	
+	def transform_circle_r(elem, attr_name, matrix)
+		r = float_attr elem, attr_name
+		r = matrix.affine_lengths(Vector.elements [r, r])[0]
+		elem.add_attribute attr_name, r
+		r
 	end
 
 	def transform_diff_xy(
