@@ -461,7 +461,7 @@ class TransformApplyer_path < TransformApplyerBase
 					next
 				end
 
-				abs_inst.value_sets.each_with_index do |value_set, index|
+				abs_inst.value_sets.each do |value_set|
 					sweep_flag = value_set[:other_values][2].value
 					if matrix[0, 0] < 0
 						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
@@ -473,7 +473,6 @@ class TransformApplyer_path < TransformApplyerBase
 =begin
 					length_pair = value_set[:length_pair].value
 					previous_position = value_set[:previous_position].value
-					# previous_position = index == 0 ? matrix.affine(value_set[:previous_position].value) : value_set[:previous_position].value
 					position = value_set[:point].value
 					large_arc_flag = value_set[:other_values][1].value
 
