@@ -42,7 +42,7 @@ module PathInstruction
 			@instruction_order = instruction_order
 			@_first_instruction = (instruction_order == 0) 
 			
-			@logger = Logger.new(STDOUT)
+			@logger = Logger.new(STDERR)
 			logger.level = Logger::WARN
 		end
 
@@ -112,7 +112,19 @@ module PathInstruction
 			@value_sets.each do |v_set|
 				apply_to_lengths matrix, v_set[:length_pair]
 				apply_to_coord   matrix, v_set[:point]
+
+				sweep_flag = v_set[:other_values][2].value
+				if matrix[0, 0] < 0
+					invert_sweep_flag v_set[:other_values][2]
+				end
+				if matrix[1, 1] < 0
+					invert_sweep_flag v_set[:other_values][2]
+				end
 			end	
+		end
+		
+		def invert_sweep_flag(sweep_flag_token)
+			sweep_flag_token.value = sweep_flag_token.value == 1 ? 0 : 1
 		end
 
 		def to_s
@@ -247,24 +259,84 @@ module PathData
 		
 		def to_abs_coord(pen_position_vec)
 			pen = Sequence.new(pen_position_vec)
-			if not relative_coord
-				return @value_sets
-			end
-			
 			abs_value_sets = Marshal.load(Marshal.dump(value_sets))
-			
-			abs_value_sets[0][:point] = Sequence.new(pen.value + @value_sets[0][:point].value)
-			for i in 1...@value_sets.size
-				abs_value_sets[i][:point] = Sequence.new(@value_sets[i][:point].value + abs_value_sets[i-1][:point].value)
+
+			if relative_coord
+				abs_value_sets[0][:point] = Sequence.new(pen.value + value_sets[0][:point].value)
+				abs_value_sets[0][:previous_position] = Marshal.load(Marshal.dump(pen))
+				for i in 1...@value_sets.size
+					abs_value_sets[i][:point] = Sequence.new(value_sets[i][:point].value + abs_value_sets[i - 1][:point].value)
+					abs_value_sets[i][:previous_position] = abs_value_sets[i - 1][:point]
+				end
+			else
+				abs_value_sets[0][:previous_position] = Marshal.load(Marshal.dump(pen))
+				for i in 1...@value_sets.size
+					abs_value_sets[i][:previous_position] = abs_value_sets[i - 1][:point]
+				end
+			end
+
+			abs_value_sets.each do |abs_value_set|
+				computed_values = compute_center_and_angle_diff(abs_value_set[:length_pair].value, abs_value_set[:previous_position].value, abs_value_set[:point].value, abs_value_set[:other_values][1].value, abs_value_set[:other_values][2].value)
+				abs_value_set[:center] = computed_values[:center]
+				abs_value_set[:angle_diff] = computed_values[:angle_diff]
 			end
 
 			return abs_value_sets
+		end
+		
+		# see: https://www.w3.org/TR/SVG/implnote.html#ArcImplementationNotes
+		def compute_center_and_angle_diff(length_pair, previous_position, position, large_arc_flag, sweep_flag)
+			v = (previous_position - position) / 2
+
+			vx = v[0]
+			vy = v[1]
+
+			rx = length_pair[0]
+			ry = length_pair[1]
+			
+			rx_sq = rx * rx
+			ry_sq = ry * ry
+			
+			vx_sq = vx * vx
+			vy_sq = vy * vy
+						
+			upper = rx_sq * ry_sq - rx_sq * vy_sq - ry_sq * vx_sq
+			lower = rx_sq * vy_sq + ry_sq * vx_sq
+			
+			rate = upper / lower
+			if rate < 0
+				throw StandardError.new "negative value in sqrt #{rate}"
+			end
+			moved_center = Math.sqrt(rate) * (Vector.elements([rx * vy / ry, -ry * vx / rx]))
+			if large_arc_flag == sweep_flag
+				moved_center *= -1
+			end
+			center = moved_center + (previous_position + position) / 2
+
+			logger.debug({prev: previous_position, pos: position, vx: vx, vy: vy, rx: rx, ry: ry, cx: center[0], cy: center[1]})
+
+			a = v - moved_center
+			a[0] /= rx
+			a[1] /= ry
+			
+			b = -v - moved_center
+			a[0] /= rx
+			a[1] /= ry
+			
+			angle_diff = ((a[0] * b[1] - a[1] * b[0]) > 0 ? 1 : -1) * a.angle_with(b)
+
+			{center: center, angle_diff: angle_diff}
 		end
 		
 		def to_abs_instruction(pen_position_vec)
 			a = InstructionA.new @instruction.value.upcase, [0,0,0,0,0,0,0], instruction_order
 			a.value_sets = to_abs_coord(pen_position_vec)
 			a
+		end
+
+		def apply!(matrix)
+			super matrix
+			apply_to_coord matrix, value_sets[0][:previous_position]
 		end
 	end
 	
