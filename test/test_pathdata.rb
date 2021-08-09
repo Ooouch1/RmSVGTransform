@@ -128,13 +128,13 @@ class InstructionTransformTest < Test::Unit::TestCase
 
 
 		def test_relative_coord
-			verify_transform ['a', vec(2,6), 3, 4, 5, vec(12, 21)],
-				PathData::InstructionA.new('a', [1,2, 3,4,5, 6,7], 1)
+			verify_transform ['A', vec(2,6), 0, 0, 1, vec(16, 26)],
+				(PathData::InstructionA.new('a', [1,2, 0,0,1, 6,7], 1)).to_abs_instruction(vec(0,0))
 		end
 
 		def test_absolute_coord
-			verify_transform ['A', vec(2.0,6.0), 3, 4, 5, vec(16, 26)],
-				PathData::InstructionA.new('A', [1,2, 3,4,5, 6,7], 1)
+			verify_transform ['A', vec(2.0,6.0), 0, 0, 1, vec(16, 26)],
+				(PathData::InstructionA.new('A', [1,2, 0,0,1, 6,7], 1)).to_abs_instruction(vec(5,5))
 		end
 	end
 

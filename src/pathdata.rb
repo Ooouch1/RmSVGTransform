@@ -274,13 +274,13 @@ module PathData
 					abs_value_sets[i][:previous_position] = abs_value_sets[i - 1][:point]
 				end
 			end
-
+=begin
 			abs_value_sets.each do |abs_value_set|
 				computed_values = compute_center_and_angle_diff(abs_value_set[:length_pair].value, abs_value_set[:previous_position].value, abs_value_set[:point].value, abs_value_set[:other_values][1].value, abs_value_set[:other_values][2].value)
 				abs_value_set[:center] = computed_values[:center]
 				abs_value_set[:angle_diff] = computed_values[:angle_diff]
 			end
-
+=end
 			return abs_value_sets
 		end
 		
