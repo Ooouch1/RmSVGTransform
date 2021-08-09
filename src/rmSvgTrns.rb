@@ -227,10 +227,10 @@ class Transformer < HasLogger
 end
 
 
-class TransformApplyerFactory
+class TransformApplyerFactory	
 	def create(svg_tag)
 		begin
-			eval "TransformApplyer_#{svg_tag}.new"
+			eval "TransformApplyer_#{svg_tag}.new(STDERR)"
 		rescue => e
 			raise UnacceptableSVGTagError.new(
 				"<#{svg_tag}> is not acceptable.")
@@ -245,8 +245,10 @@ class TransformApplyerBase < HasLogger
 
 	attr_accessor :style_codec
 	
-	def initialize()
-		super()
+	def initialize(log_dest)
+		super(log_dest)
+		@logger.level = Logger::INFO
+		
 		@_can_apply = {
 			'matrix'   => true,
 			'translate'=> true,
@@ -320,8 +322,8 @@ class TransformApplyerBase < HasLogger
 end
 
 class ShapeTransformApplyerBase < TransformApplyerBase
-	def initialize()
-		super()
+	def initialize(log_dest)
+		super(log_dest)
 		disable_skew
 		disable_rotate
 	end
@@ -409,8 +411,8 @@ class ShapeTransformApplyerBase < TransformApplyerBase
 end
 
 class TransformApplyer_circle < ShapeTransformApplyerBase
-	def initialize
-		super()
+	def initialize(log_dest)
+		super(log_dest)
 		enable_rotate()
 	end
 	def _apply(svg_element, matrix)
@@ -420,6 +422,9 @@ class TransformApplyer_circle < ShapeTransformApplyerBase
 end
 
 class TransformApplyer_ellipse < ShapeTransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		_transform_cx_cy svg_element, matrix
 		_transform_rx_ry svg_element, matrix
@@ -429,8 +434,8 @@ end
 class TransformApplyer_path < TransformApplyerBase
 	attr_accessor :codec
 
-	def initialize
-		super
+	def initialize(log_dest)
+		super(log_dest)
 		@codec = PathData::Codec.new
 	end
 
@@ -438,18 +443,49 @@ class TransformApplyer_path < TransformApplyerBase
 		instructions = @codec.decode_path_data(
 			svg_element.attribute('d').value)
 
-		pen_position_vec = Vector.elements [0,0]
 		abs_instructions = Array.new(0)
 		begin
+			pen_position_vec = Vector.elements [0,0]			
 			instructions.each do |inst|
 				non_unary_inst = (inst.is_a?(PathInstruction::Unary) ? inst.to_instructionL(pen_position_vec) : inst)
 				abs_inst =  non_unary_inst.to_abs_instruction(pen_position_vec)
 				pen_position_vec = abs_inst.last_point_vec
 				abs_instructions.append abs_inst
 			end
+			
 			abs_instructions.each do |abs_inst|
-				logger.info "transform #{abs_inst}"
+				logger.debug "transform #{abs_inst}"
 				abs_inst.apply! matrix
+
+				if not abs_inst.is_a?(PathData::InstructionA)
+					next
+				end
+
+				abs_inst.value_sets.each_with_index do |value_set, index|
+					length_pair = value_set[:length_pair].value
+					previous_position = value_set[:previous_position].value
+					# previous_position = index == 0 ? matrix.affine(value_set[:previous_position].value) : value_set[:previous_position].value
+					position = value_set[:point].value
+					large_arc_flag = value_set[:other_values][1].value
+					sweep_flag = value_set[:other_values][2].value
+
+					computed_values = abs_inst.compute_center_and_angle_diff(length_pair, previous_position, position, large_arc_flag, sweep_flag)
+					center = computed_values[:center]
+					angle_diff = computed_values[:angle_diff]
+
+=begin
+					if (angle_diff < 0 and value_set[:angle_diff] > 0) or (angle_diff > 0 and value_set[:angle_diff] < 0)
+						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
+					end
+=end
+					applied_old_center = matrix.affine(value_set[:center])
+
+					if _error(center[0], applied_old_center[0]) > 0.1 or _error(center[1], applied_old_center[1]) > 0.1
+						logger.info({id: svg_element.attribute("id"), center_after_apply: center, applied_old_center: applied_old_center})
+						logger.info("fix sweep flag: old: #{sweep_flag}")
+						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
+					end
+				end
 			end
 		rescue => e
 			raise ArgumentError, 
@@ -459,9 +495,16 @@ class TransformApplyer_path < TransformApplyerBase
 
 		svg_element.add_attribute 'd', @codec.encode_path_data(abs_instructions)
 	end
+	
+	def _error(before, after)
+		((before - after) / before).abs
+	end
 end
 
 class TransformApplyer_rect < ShapeTransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		_transform_rect_area(svg_element, matrix)
 		_transform_rx_ry svg_element, matrix
@@ -469,6 +512,9 @@ class TransformApplyer_rect < ShapeTransformApplyerBase
 end
 
 class TransformApplyer_polygon < TransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		codec = PathData::Codec.new
 		instructions = codec.decode_path_data('M ' + svg_element.attribute('points').value)
@@ -481,6 +527,9 @@ class TransformApplyer_polygon < TransformApplyerBase
 end
 
 class TransformApplyer_polyline < TransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		codec = PathData::Codec.new
 		instructions = codec.decode_path_data('M ' + svg_element.attribute('points').value)
@@ -493,6 +542,9 @@ class TransformApplyer_polyline < TransformApplyerBase
 end
 
 class TransformApplyer_line < TransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		@helper.transform_point svg_element, 'x1', 'y1', matrix
 		@helper.transform_point svg_element, 'x2', 'y2', matrix
@@ -501,6 +553,9 @@ end
 
 
 class TransformApplyer_mask < ShapeTransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 
 		# FIXME: doesn't work. need to work on its specification.
@@ -512,6 +567,9 @@ end
 
 
 class TransformApplyer_text < ShapeTransformApplyerBase
+	def initialize(log_dest)
+		super(log_dest)
+	end
 	def _apply(svg_element, matrix)
 		_transform_x_y svg_element, matrix, nil, nil
 
