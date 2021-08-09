@@ -112,7 +112,19 @@ module PathInstruction
 			@value_sets.each do |v_set|
 				apply_to_lengths matrix, v_set[:length_pair]
 				apply_to_coord   matrix, v_set[:point]
+
+				sweep_flag = v_set[:other_values][2].value
+				if matrix[0, 0] < 0
+					invert_sweep_flag v_set[:other_values][2]
+				end
+				if matrix[1, 1] < 0
+					invert_sweep_flag v_set[:other_values][2]
+				end
 			end	
+		end
+		
+		def invert_sweep_flag(sweep_flag_token)
+			sweep_flag_token.value = sweep_flag_token.value == 1 ? 0 : 1
 		end
 
 		def to_s

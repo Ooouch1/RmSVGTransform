@@ -456,38 +456,6 @@ class TransformApplyer_path < TransformApplyerBase
 			abs_instructions.each do |abs_inst|
 				logger.debug "transform #{abs_inst}"
 				abs_inst.apply! matrix
-
-				if not abs_inst.is_a?(PathData::InstructionA)
-					next
-				end
-
-				abs_inst.value_sets.each do |value_set|
-					sweep_flag = value_set[:other_values][2].value
-					if matrix[0, 0] < 0
-						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
-					end
-					if matrix[1, 1] < 0
-						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
-					end
-
-=begin
-					length_pair = value_set[:length_pair].value
-					previous_position = value_set[:previous_position].value
-					position = value_set[:point].value
-					large_arc_flag = value_set[:other_values][1].value
-
-					computed_values = abs_inst.compute_center_and_angle_diff(length_pair, previous_position, position, large_arc_flag, sweep_flag)
-					center = computed_values[:center]
-					angle_diff = computed_values[:angle_diff]
-
-					applied_old_center = matrix.affine(value_set[:center])
-					if _error(center[0], applied_old_center[0]) > 0.1 or _error(center[1], applied_old_center[1]) > 0.1
-						logger.info({id: svg_element.attribute("id"), center_after_apply: center, applied_old_center: applied_old_center})
-						logger.info("fix sweep flag: old: #{sweep_flag}")
-						value_set[:other_values][2].value = sweep_flag == 1 ? 0 : 1
-					end
-=end
-				end
 			end
 		rescue => e
 			raise ArgumentError, 
