@@ -43,7 +43,7 @@ module PathInstruction
 			@_first_instruction = (instruction_order == 0) 
 			
 			@logger = Logger.new(STDERR)
-			logger.level = Logger::DEBUG
+			logger.level = Logger::WARN
 		end
 
 		def encode
