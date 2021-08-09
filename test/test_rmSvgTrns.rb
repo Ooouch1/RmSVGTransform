@@ -168,7 +168,7 @@ class TransformerTest < Test::Unit::TestCase
 
 	def test_effect_of_applyers_disable_skew
 		transformer = Transformer.new
-		applyer = StubTransformApplyer.new
+		applyer = StubTransformApplyer.new  STDOUT
 		stub(transformer.applyer_factory).create {applyer}
 		element_dummy = REXML::Element.new 'circle'
 
@@ -254,7 +254,7 @@ class PathTransformTest < Test::Unit::TestCase
 	
 	sub_test_case 'applyer for path' do
 		def test_apply_enlarge
-			applyer = TransformApplyer_path.new
+			applyer = TransformApplyer_path.new STDOUT
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			stub_matrix = applyer.helper.matrix_of nil
 
@@ -299,7 +299,7 @@ class ShapeTransformTest < Test::Unit::TestCase
 	sub_test_case 'applyer for circle' do
 
 		def test_apply_enlarge
-			applyer = TransformApplyer_circle.new
+			applyer = TransformApplyer_circle.new  STDOUT
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
 			stub_style_codec(applyer.style_codec)
@@ -320,7 +320,7 @@ class ShapeTransformTest < Test::Unit::TestCase
 	sub_test_case 'applyer for rect' do
 
 		def test_apply_enlarge_rx_ry_exists
-			applyer = TransformApplyer_rect.new
+			applyer = TransformApplyer_rect.new STDOUT
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
 			stub_style_codec(applyer.style_codec)
@@ -344,7 +344,7 @@ class ShapeTransformTest < Test::Unit::TestCase
 		end
 		
 		def test_apply_enlarge_only_rx_or_ry_exists
-			applyer = TransformApplyer_rect.new
+			applyer = TransformApplyer_rect.new STDOUT
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
 			stub_style_codec(applyer.style_codec)
@@ -364,7 +364,7 @@ class ShapeTransformTest < Test::Unit::TestCase
 		end
 
 		def test_apply_enlarge_rx_and_ry_dont_exists
-			applyer = TransformApplyer_rect.new
+			applyer = TransformApplyer_rect.new STDOUT
 			stub_helper_matrix_of_enlarge_twice applyer.helper
 			
 			stub_style_codec(applyer.style_codec)

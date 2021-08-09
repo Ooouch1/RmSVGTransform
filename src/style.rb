@@ -17,13 +17,22 @@ module Style
 
 	class StrokeWidth < AttributeBase
 		def initialize(key, value)
-			super(key, value.to_f)
+			val_match = value.match(/[.0-9]+/)
+
+			unit_match = value.match(/[a-z]+/)
+			@unit = unit_match ? unit_match[0] : ''
+
+			super(key, val_match[0].to_f)
 		end
 
 		def apply!(matrix)
 			# Remove Inkscape-specific treatment.
 			# You can find it in c++ code of it.
 			@value *= Math.sqrt(matrix.determinant.abs)
+		end
+
+		def encode
+			"#{@key}:#{@value}#{@unit};"
 		end
 	end
 
