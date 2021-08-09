@@ -465,10 +465,6 @@ class TransformApplyer_path < TransformApplyerBase
 
 		svg_element.add_attribute 'd', @codec.encode_path_data(abs_instructions)
 	end
-	
-	def _error(before, after)
-		((before - after) / before).abs
-	end
 end
 
 class TransformApplyer_rect < ShapeTransformApplyerBase
